@@ -1,8 +1,8 @@
-from constants import VALID_PIECES, VALID_TEAMS, EMPTY_CELL, CELL_SIZE
+from constants import VALID_PIECES, VALID_TEAMS, EMPTY_CELL, CELL_SIZE, MS_PER_CELL
 from exceptions import BoardValidationError
 
 class Board:
-    """מחלקה המייצגת את לוח המשחק ומנהלת את חוקי התנועה (State + Rules)"""
+    """מחלקה המייצגת את לוח המשחק ומנהלת את חוקי התנועה, הזמן והתעלמות מרדירקט"""
     def __init__(self, grid):
         self._grid = grid
         self._validate_board()
@@ -12,6 +12,9 @@ class Board:
         
         self._selected_cell = None
         self._game_clock_ms = 0
+        
+        # משתנה לשמירת מהלך שנמצא כרגע בדרך ("בתנועה")
+        self._pending_move = None
 
     def _validate_board(self):
         """בדיקות תקינות ללוח"""
@@ -50,54 +53,46 @@ class Board:
         return True
 
     def _is_move_legal(self, selected_token, from_row, from_col, to_row, to_col):
-        """מיישמת את דפוסי התנועה עבור כל כלי המשחק (כולל חייל פשוט)"""
+        """מיישמת את דפוסי התנועה עבור כל כלי המשחק"""
         team = selected_token[0]
         piece_type = selected_token[1].upper()
 
-        # חישוב מרחקים מוחלטים (עבור הכלים הרגילים)
         dr_abs = abs(to_row - from_row)
         dc_abs = abs(to_col - from_col)
 
-        # לוגיקה ייחודית עבור חייל (Pawn)
+        # לוגיקה עבור חייל (Pawn)
         if piece_type == 'P':
             dr_signed = to_row - from_row
-            
-            # 1. בדיקת כיוון התנועה לפי צבע החייל (לבן עולה למעלה, שחור יורד למטה)
             if team == 'w' and dr_signed != -1:
                 return False
             if team == 'b' and dr_signed != 1:
                 return False
 
             target_token = self._grid[to_row][to_col]
-
-            # 2. תנועה ישר קדימה: מותרת רק למשבצת ריקה (אסור לתפוס קדימה)
             if dc_abs == 0:
                 return target_token == EMPTY_CELL
-                
-            # 3. תנועה באלכסון: מותרת רק אם יש שם כלי אויב (תפיסה באלכסון)
             elif dc_abs == 1:
                 return target_token != EMPTY_CELL
-
             return False
 
-        # לוגיקה עבור שאר הכלים (מאיטרציות קודמות)
-        if piece_type == 'K':    # מלך
+        # לוגיקה עבור שאר הכלים
+        if piece_type == 'K':
             return dr_abs <= 1 and dc_abs <= 1
 
-        elif piece_type == 'N':  # פרש
+        elif piece_type == 'N':
             return (dr_abs == 2 and dc_abs == 1) or (dr_abs == 1 and dc_abs == 2)
 
-        elif piece_type == 'R':  # צריח
+        elif piece_type == 'R':
             if dr_abs == 0 or dc_abs == 0:
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
 
-        elif piece_type == 'B':  # רץ
+        elif piece_type == 'B':
             if dr_abs == dc_abs:
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
 
-        elif piece_type == 'Q':  # מלכה
+        elif piece_type == 'Q':
             if (dr_abs == 0 or dc_abs == 0) or (dr_abs == dc_abs):
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
@@ -105,26 +100,27 @@ class Board:
         return False
 
     def handle_click(self, x: int, y: int):
-        """מטפלת בלחיצות עכבר, בחירת כלים ותנועה חוקית בהתאם לסוג הכלי"""
+        """מטפלת בלחיצות עכבר. מתעלמת מכל לחיצה על כלי שנמצא כרגע בתנועה באמצע הדרך"""
         col = x // CELL_SIZE
         row = y // CELL_SIZE
 
         if not (0 <= row < self._rows and 0 <= col < self._cols):
             return
 
+        # אם יש מהלך אסור לתת למהלך נוסף לקרות תוך כדי
+        if self._pending_move and (row, col) == self._pending_move['from']:
+            return
+
         clicked_token = self._grid[row][col]
 
-        # תרחיש א': אין כלי נבחר כרגע
         if self._selected_cell is None:
             if clicked_token != EMPTY_CELL:
                 self._selected_cell = (row, col)
             return
 
-        # תרחיש ב': יש כלי נבחר
         sel_row, sel_col = self._selected_cell
         selected_token = self._grid[sel_row][sel_col]
         
-        # בדיקה האם מדובר בכלי ידידותי אחר (מוציא מכלל אפשרות לחיצה על עצמו)
         is_friendly = (clicked_token != EMPTY_CELL and 
                        clicked_token[0] == selected_token[0] and 
                        (row, col) != self._selected_cell)
@@ -132,17 +128,35 @@ class Board:
         if is_friendly:
             self._selected_cell = (row, col)
         else:
-            # שליחת ה-token המלא לבדיקת חוקיות המהלך
             if self._is_move_legal(selected_token, sel_row, sel_col, row, col):
-                self._grid[row][col] = selected_token
-                self._grid[sel_row][sel_col] = EMPTY_CELL
+                # חישוב מרחק דינמי
+                distance = max(abs(row - sel_row), abs(col - sel_col))
+                duration = distance * MS_PER_CELL
+                arrival_time = self._game_clock_ms + duration
+                
+                self._pending_move = {
+                    'from': (sel_row, sel_col),
+                    'to': (row, col),
+                    'token': selected_token,
+                    'arrival_time': arrival_time
+                }
                 self._selected_cell = None
             else:
-                # מהלך לא חוקי -> מתעלמים
                 pass
 
     def handle_wait(self, ms: int):
+        """מקדמת את השעון ובודקת האם הגיע זמן ההגעה המדויק של הכלי"""
         self._game_clock_ms += ms
+
+        if self._pending_move and self._game_clock_ms >= self._pending_move['arrival_time']:
+            from_r, from_c = self._pending_move['from']
+            to_r, to_c = self._pending_move['to']
+            token = self._pending_move['token']
+
+            self._grid[to_r][to_c] = token
+            self._grid[from_r][from_c] = EMPTY_CELL
+            
+            self._pending_move = None
 
     def display(self):
         for row in self._grid:
