@@ -10,8 +10,10 @@ def main():
         if not grid:
             return
         
+        # יצירת הלוח (הולידציה קורית בפנים)
         board = Board(grid)
         
+        # שלב עיבוד הפקודות הדינמיות
         for cmd in commands:
             parts = cmd.split()
             if not parts:
