@@ -43,42 +43,69 @@ class Board:
 
         while (curr_row, curr_col) != (to_row, to_col):
             if self._grid[curr_row][curr_col] != EMPTY_CELL:
-                return False  # נמצאה חסימה בדרך!
+                return False
             curr_row += step_row
             curr_col += step_col
 
         return True
 
-    def _is_move_legal(self, piece_type, from_row, from_col, to_row, to_col):
-        """מיישמת את דפוסי התנועה עבור כל כלי (כולל מהלך למקום)"""
-        dr = abs(to_row - from_row)
-        dc = abs(to_col - from_col)
+    def _is_move_legal(self, selected_token, from_row, from_col, to_row, to_col):
+        """מיישמת את דפוסי התנועה עבור כל כלי המשחק (כולל חייל פשוט)"""
+        team = selected_token[0]
+        piece_type = selected_token[1].upper()
 
+        # חישוב מרחקים מוחלטים (עבור הכלים הרגילים)
+        dr_abs = abs(to_row - from_row)
+        dc_abs = abs(to_col - from_col)
+
+        # לוגיקה ייחודית עבור חייל (Pawn)
+        if piece_type == 'P':
+            dr_signed = to_row - from_row
+            
+            # 1. בדיקת כיוון התנועה לפי צבע החייל (לבן עולה למעלה, שחור יורד למטה)
+            if team == 'w' and dr_signed != -1:
+                return False
+            if team == 'b' and dr_signed != 1:
+                return False
+
+            target_token = self._grid[to_row][to_col]
+
+            # 2. תנועה ישר קדימה: מותרת רק למשבצת ריקה (אסור לתפוס קדימה)
+            if dc_abs == 0:
+                return target_token == EMPTY_CELL
+                
+            # 3. תנועה באלכסון: מותרת רק אם יש שם כלי אויב (תפיסה באלכסון)
+            elif dc_abs == 1:
+                return target_token != EMPTY_CELL
+
+            return False
+
+        # לוגיקה עבור שאר הכלים (מאיטרציות קודמות)
         if piece_type == 'K':    # מלך
-            return dr <= 1 and dc <= 1
+            return dr_abs <= 1 and dc_abs <= 1
 
-        elif piece_type == 'N':  # פרש (יכול לקפוץ, אין בדיקת מסלול)
-            return (dr == 2 and dc == 1) or (dr == 1 and dc == 2)
+        elif piece_type == 'N':  # פרש
+            return (dr_abs == 2 and dc_abs == 1) or (dr_abs == 1 and dc_abs == 2)
 
         elif piece_type == 'R':  # צריח
-            if dr == 0 or dc == 0:
+            if dr_abs == 0 or dc_abs == 0:
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
 
         elif piece_type == 'B':  # רץ
-            if dr == dc:
+            if dr_abs == dc_abs:
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
 
         elif piece_type == 'Q':  # מלכה
-            if (dr == 0 or dc == 0) or (dr == dc):
+            if (dr_abs == 0 or dc_abs == 0) or (dr_abs == dc_abs):
                 return self._is_path_clear(from_row, from_col, to_row, to_col)
             return False
 
         return False
 
     def handle_click(self, x: int, y: int):
-        """מטפלת בלחיצות עכבר, בחירת כלים, חסימות ואכילת אויב"""
+        """מטפלת בלחיצות עכבר, בחירת כלים ותנועה חוקית בהתאם לסוג הכלי"""
         col = x // CELL_SIZE
         row = y // CELL_SIZE
 
@@ -97,7 +124,7 @@ class Board:
         sel_row, sel_col = self._selected_cell
         selected_token = self._grid[sel_row][sel_col]
         
-        # כלי הוא ידידותי רק אם הוא מאותו צבע וזה *לא* אותו כלי שנבחר כרגע (מאפשר קפיצה למקום)
+        # בדיקה האם מדובר בכלי ידידותי אחר (מוציא מכלל אפשרות לחיצה על עצמו)
         is_friendly = (clicked_token != EMPTY_CELL and 
                        clicked_token[0] == selected_token[0] and 
                        (row, col) != self._selected_cell)
@@ -105,15 +132,13 @@ class Board:
         if is_friendly:
             self._selected_cell = (row, col)
         else:
-            piece_type = selected_token[1].upper()
-            
-            if self._is_move_legal(piece_type, sel_row, sel_col, row, col):
-                # המהלך חוקי -> מזיזים (או אוכלים את האויב) ומאפסים בחירה
+            # שליחת ה-token המלא לבדיקת חוקיות המהלך
+            if self._is_move_legal(selected_token, sel_row, sel_col, row, col):
                 self._grid[row][col] = selected_token
                 self._grid[sel_row][sel_col] = EMPTY_CELL
                 self._selected_cell = None
             else:
-                # מהלך לא חוקי (כולל ניסיון דילוג מעל חוסם) -> מתעלמים
+                # מהלך לא חוקי -> מתעלמים
                 pass
 
     def handle_wait(self, ms: int):
