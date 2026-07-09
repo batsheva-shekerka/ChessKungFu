@@ -1,53 +1,37 @@
-import sys
+# Git Repository URL: https://github.com/batsheva-shekerka/ChessKungFu.git
+
+from parser import BoardParser
+from board import Board
+from exceptions import BoardValidationError
 
 def main():
-    lines = [line.strip() for line in sys.stdin if line.strip()]
-    
-    board_lines = []
-    commands = []
-    current_section = None
-    
-    for line in lines:
-        if line.startswith("Board:"):
-            current_section = "board"
-            continue
-        elif line.startswith("Commands:"):
-            current_section = "commands"
-            continue
-        
-        if current_section == "board":
-            board_lines.append(line)
-        elif current_section == "commands":
-            commands.append(line)
-            
-    if not board_lines:
-        return
-
-    parsed_board = [row.split() for row in board_lines]
-    
-    expected_width = len(parsed_board[0])
-    for row in parsed_board:
-        if len(row) != expected_width:
-            print("ERROR ROW_WIDTH_MISMATCH")
+    try:
+        grid, commands = BoardParser.parse_from_stdin()
+        if not grid:
             return
-
-   
-    valid_pieces = {'K', 'Q', 'R', 'B', 'N', 'P'}
-    
-    for row in parsed_board:
-        for token in row:
-            if token == '.':
+        
+        board = Board(grid)
+        
+        for cmd in commands:
+            parts = cmd.split()
+            if not parts:
                 continue
-            if len(token) == 2 and token[0] in ('w', 'b') and token[1].upper() in valid_pieces:
-                continue
-            else:
-                print("ERROR UNKNOWN_TOKEN")
-                return
-
-    for cmd in commands:
-        if cmd == "print board":
-            for row in parsed_board:
-                print(" ".join(row))
+                
+            command_type = parts[0]
+            
+            if command_type == "click" and len(parts) == 3:
+                x, y = int(parts[1]), int(parts[2])
+                board.handle_click(x, y)
+                
+            elif command_type == "wait" and len(parts) == 2:
+                ms = int(parts[1])
+                board.handle_wait(ms)
+                
+            elif cmd == "print board":
+                board.display()
+                
+    except BoardValidationError as e:
+        print(f"{e}")
 
 if __name__ == "__main__":
     main()
