@@ -2,7 +2,7 @@ from constants import VALID_PIECES, VALID_TEAMS, EMPTY_CELL, CELL_SIZE, MS_PER_C
 from exceptions import BoardValidationError
 
 class Board:
-    """מחלקה המייצגת את לוח המשחק ומנהלת את חוקי התנועה, הזמן והתעלמות מרדירקט"""
+    """מחלקה המייצגת את לוח המשחק ומנהלת תנועה סימולטנית וחסימת מסלולים משותפים"""
     def __init__(self, grid):
         self._grid = grid
         self._validate_board()
@@ -13,8 +13,8 @@ class Board:
         self._selected_cell = None
         self._game_clock_ms = 0
         
-        # משתנה לשמירת מהלך שנמצא כרגע בדרך ("בתנועה")
-        self._pending_move = None
+        # שדרוג לרשימה כדי לתמוך בתנועה של כמה כלים במקביל
+        self._pending_moves = []
 
     def _validate_board(self):
         """בדיקות תקינות ללוח"""
@@ -32,7 +32,7 @@ class Board:
                     raise BoardValidationError("UNKNOWN TOKEN")
 
     def _is_path_clear(self, from_row, from_col, to_row, to_col):
-        """בודקת האם הדרך בין שתי משבצות פנויה מכלי חסימה (לא כולל משבצת היעד)"""
+        """בודקת האם הדרך בין שתי משבצות פנויה מכלי חסימה על הלוח"""
         if to_row > from_row: step_row = 1
         elif to_row < from_row: step_row = -1
         else: step_row = 0
@@ -100,16 +100,17 @@ class Board:
         return False
 
     def handle_click(self, x: int, y: int):
-        """מטפלת בלחיצות עכבר. מתעלמת מכל לחיצה על כלי שנמצא כרגע בתנועה באמצע הדרך"""
+        """מטפלת בלחיצות עכבר, מנהלת חסימות רדירקט ומסלולים משותפים בין יריבים"""
         col = x // CELL_SIZE
         row = y // CELL_SIZE
 
         if not (0 <= row < self._rows and 0 <= col < self._cols):
             return
 
-        # אם יש מהלך אסור לתת למהלך נוסף לקרות תוך כדי
-        if self._pending_move and (row, col) == self._pending_move['from']:
-            return
+        # שומר סף: מניעת הסטה (Redirect) של כלי שנמצא כרגע בתנועה
+        for pm in self._pending_moves:
+            if (row, col) == pm['from']:
+                return
 
         clicked_token = self._grid[row][col]
 
@@ -129,34 +130,65 @@ class Board:
             self._selected_cell = (row, col)
         else:
             if self._is_move_legal(selected_token, sel_row, sel_col, row, col):
-                # חישוב מרחק דינמי
+                
+                # בדיקת חסימת מסלול משותף (Common Route) מול כלי יריב בתנועה
+                has_route_conflict = False
+                for pm in self._pending_moves:
+                    # אם זה כלי של הקבוצה היריבה
+                    if pm['token'][0] != selected_token[0]:
+                        # בודקים אם יש שורה משותפת או עמודה משותפת במסלולים שלהם
+                        pm_rows = {pm['from'][0], pm['to'][0]}
+                        pm_cols = {pm['from'][1], pm['to'][1]}
+                        new_rows = {sel_row, row}
+                        new_cols = {sel_col, col}
+                        
+                        if (pm_rows & new_rows) or (pm_cols & new_cols):
+                            has_route_conflict = True
+                            break
+                
+                # אם יש התנגשות מסלולים עם כלי יריב - מתעלמים מהמהלך לחלוטין!
+                if has_route_conflict:
+                    self._selected_cell = None
+                    return
+
+                # חישוב מרחק וזמן הגעה דינמי
                 distance = max(abs(row - sel_row), abs(col - sel_col))
                 duration = distance * MS_PER_CELL
                 arrival_time = self._game_clock_ms + duration
                 
-                self._pending_move = {
+                # הוספת המהלך לרשימת המהלכים הפעילים
+                self._pending_moves.append({
                     'from': (sel_row, sel_col),
                     'to': (row, col),
                     'token': selected_token,
                     'arrival_time': arrival_time
-                }
+                })
                 self._selected_cell = None
             else:
                 pass
 
     def handle_wait(self, ms: int):
-        """מקדמת את השעון ובודקת האם הגיע זמן ההגעה המדויק של הכלי"""
+        """מקדמת את השעון ומבצעת את כל המהלכים שהגיע זמן הגעתם לפי הסדר"""
         self._game_clock_ms += ms
 
-        if self._pending_move and self._game_clock_ms >= self._pending_move['arrival_time']:
-            from_r, from_c = self._pending_move['from']
-            to_r, to_c = self._pending_move['to']
-            token = self._pending_move['token']
+        remaining_moves = []
+        
+        # נמיין לפי זמן הגעה כדי שהכלים יגיעו בסדר כרונולוגי נכון
+        self._pending_moves.sort(key=lambda x: x['arrival_time'])
 
-            self._grid[to_r][to_c] = token
-            self._grid[from_r][from_c] = EMPTY_CELL
-            
-            self._pending_move = None
+        for pm in self._pending_moves:
+            if self._game_clock_ms >= pm['arrival_time']:
+                from_r, from_c = pm['from']
+                to_r, to_c = pm['to']
+                token = pm['token']
+
+                # ביצוע המהלך בפועל על הלוח
+                self._grid[to_r][to_c] = token
+                self._grid[from_r][from_c] = EMPTY_CELL
+            else:
+                remaining_moves.append(pm)
+
+        self._pending_moves = remaining_moves
 
     def display(self):
         for row in self._grid:
