@@ -2,7 +2,7 @@ from constants import VALID_PIECES, VALID_TEAMS, EMPTY_CELL, CELL_SIZE, MS_PER_C
 from exceptions import BoardValidationError
 
 class Board:
-    """מחלקה המייצגת את לוח המשחק ומנהלת תנועה, התנגשויות ומצב סיום משחק (Game Over)"""
+    """מחלקה המייצגת את לוח המשחק ומנהלת חוקי חייל מתקדמים (צעד כפול והכתרה) בזמן אמת"""
     def __init__(self, grid):
         self._grid = grid
         self._validate_board()
@@ -13,7 +13,7 @@ class Board:
         self._selected_cell = None
         self._game_clock_ms = 0
         self._pending_moves = []
-        self._game_over = False  # משתנה בוליאני חדש למעקב אחר סטטוס המשחק
+        self._game_over = False
 
     def _validate_board(self):
         """בדיקות תקינות ללוח"""
@@ -63,23 +63,45 @@ class Board:
         return True
 
     def _is_move_legal(self, selected_token, from_row, from_col, to_row, to_col):
-        """מיישמת את דפוסי התנועה עבור כל כלי המשחק"""
+        """מיישמת את דפוסי התנועה עבור כל כלי המשחק כולל חייל מתקדם"""
         team = selected_token[0]
         piece_type = selected_token[1].upper()
 
         dr_abs = abs(to_row - from_row)
         dc_abs = abs(to_col - from_col)
 
+        # לוגיקת חייל משופרת (איטרציה 10)
         if piece_type == 'P':
             dr_signed = to_row - from_row
-            if team == 'w' and dr_signed != -1: return False
-            if team == 'b' and dr_signed != 1: return False
-
             target_token = self._grid[to_row][to_col]
-            if dc_abs == 0:
-                return target_token == EMPTY_CELL
-            elif dc_abs == 1:
-                return target_token != EMPTY_CELL
+
+            # א) תנועה אלכסונית - לכידת כלי אויב (תמיד צעד אחד בלבד)
+            if dc_abs == 1:
+                if team == 'w' and dr_signed == -1 and target_token != EMPTY_CELL:
+                    return True
+                if team == 'b' and dr_signed == 1 and target_token != EMPTY_CELL:
+                    return True
+                return False
+
+            # ב) תנועה ישרה קדימה (תא היעד חייב להיות ריק פיזית)
+            elif dc_abs == 0:
+                if target_token != EMPTY_CELL:
+                    return False
+
+                # צעד אחד רגיל קדימה
+                if team == 'w' and dr_signed == -1:
+                    return True
+                if team == 'b' and dr_signed == 1:
+                    return True
+
+                # צעד כפול משורת ההתחלה המעודכנת (שורה 0 לשחור, שורת rows-1 ללבן)
+                if team == 'w' and dr_signed == -2 and from_row == self._rows - 1:
+                    return self._is_path_clear(from_row, from_col, to_row, to_col)
+                if team == 'b' and dr_signed == 2 and from_row == 0:
+                    return self._is_path_clear(from_row, from_col, to_row, to_col)
+
+                return False
+            
             return False
 
         if piece_type == 'K': return dr_abs <= 1 and dc_abs <= 1
@@ -97,8 +119,7 @@ class Board:
         return False
 
     def handle_click(self, x: int, y: int):
-        """מטפלת בלחיצות עכבר ומסננת קלטים אם המשחק נגמר"""
-        # בדיקה האם המשחק נגמר - אם כן, מתעלמים מהלחיצה לחלוטין
+        """מטפלת בלחיצות עכבר ומסננת קלטים"""
         if self._game_over:
             return
 
@@ -148,8 +169,7 @@ class Board:
                 self._selected_cell = None
 
     def handle_wait(self, ms: int):
-        """מקדמת שעון, מבצעת לכידות ובודקת השתלטות על מלך האויב"""
-        # בדיקה האם המשחק כבר נגמר - אם כן, מתעלמים מפקודות המתנה נוספות
+        """מקדמת שעון, מבצעת לכידות ומטפלת בהכתרת חייל למלכה בשורה האחרונה"""
         if self._game_over:
             return
 
@@ -168,15 +188,18 @@ class Board:
 
                 self._grid[from_r][from_c] = EMPTY_CELL
                 
-                # בדיקה האם משבצת היעד מכילה מלך (של האויב או בכלל)
                 target_token = self._grid[to_r][to_c]
                 if target_token != EMPTY_CELL and target_token[1].upper() == 'K':
                     self._game_over = True
 
-                # ביצוע המהלך (ההשתלטות) בפועל על הלוח
-                self._grid[to_r][to_c] = token
+                # לוגיקת הכתרה
+                final_token = token
+                if token[1].upper() == 'P':
+                    if (token[0] == 'w' and to_r == 0) or (token[0] == 'b' and to_r == self._rows - 1):
+                        final_token = token[0] + 'Q'
+
+                self._grid[to_r][to_c] = final_token
                 
-                # אם המלך נלכד, עוצרים מיד את הלולאה ומרוקנים מהלכים עתידיים
                 if self._game_over:
                     self._pending_moves = []
                     return
