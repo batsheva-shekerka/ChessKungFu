@@ -2,7 +2,7 @@ from constants import VALID_PIECES, VALID_TEAMS, EMPTY_CELL, CELL_SIZE, MS_PER_C
 from exceptions import BoardValidationError
 
 class Board:
-    """מחלקה המייצגת את לוח המשחק ומנהלת חוקי חייל מתקדמים (צעד כפול והכתרה) בזמן אמת"""
+    """מחלקה המייצגת את לוח המשחק ומנהלת חוקי תנועה, קפיצות, וקונפליקטים בזמן אמת"""
     def __init__(self, grid):
         self._grid = grid
         self._validate_board()
@@ -14,6 +14,7 @@ class Board:
         self._game_clock_ms = 0
         self._pending_moves = []
         self._game_over = False
+        self._move_counter = 0
 
     def _validate_board(self):
         """בדיקות תקינות ללוח"""
@@ -31,18 +32,16 @@ class Board:
                     raise BoardValidationError("UNKNOWN TOKEN")
 
     def _is_cell_occupied_dynamic(self, r, c):
-        """בדיקה דינמית: האם תא חסום כרגע על ידי כלי סטטי או כלי שבדרך אליו"""
+        """בדיקה דינמית: האם תא חסום על ידי כלי שבדרך אליו או כלי סטטי"""
         for pm in self._pending_moves:
             if pm['to'] == (r, c):
                 return True
         if self._grid[r][c] != EMPTY_CELL:
-            is_moving_away = any(pm['from'] == (r, c) for pm in self._pending_moves)
-            if not is_moving_away:
-                return True
+            return True
         return False
 
     def _is_path_clear(self, from_row, from_col, to_row, to_col):
-        """בודקת האם הדרך פנויה (לוקחת בחשבון כלים בתנועה)"""
+        """בודקת האם הדרך פנויה"""
         if to_row > from_row: step_row = 1
         elif to_row < from_row: step_row = -1
         else: step_row = 0
@@ -63,45 +62,35 @@ class Board:
         return True
 
     def _is_move_legal(self, selected_token, from_row, from_col, to_row, to_col):
-        """מיישמת את דפוסי התנועה עבור כל כלי המשחק כולל חייל מתקדם"""
+        """מיישמת את דפוסי התנועה עבור כלי המשחק"""
         team = selected_token[0]
         piece_type = selected_token[1].upper()
 
         dr_abs = abs(to_row - from_row)
         dc_abs = abs(to_col - from_col)
 
-        # לוגיקת חייל משופרת (איטרציה 10)
         if piece_type == 'P':
             dr_signed = to_row - from_row
             target_token = self._grid[to_row][to_col]
 
-            # א) תנועה אלכסונית - לכידת כלי אויב (תמיד צעד אחד בלבד)
             if dc_abs == 1:
                 if team == 'w' and dr_signed == -1 and target_token != EMPTY_CELL:
                     return True
                 if team == 'b' and dr_signed == 1 and target_token != EMPTY_CELL:
                     return True
                 return False
-
-            # ב) תנועה ישרה קדימה (תא היעד חייב להיות ריק פיזית)
             elif dc_abs == 0:
                 if target_token != EMPTY_CELL:
                     return False
-
-                # צעד אחד רגיל קדימה
                 if team == 'w' and dr_signed == -1:
                     return True
                 if team == 'b' and dr_signed == 1:
                     return True
-
-                # צעד כפול משורת ההתחלה המעודכנת (שורה 0 לשחור, שורת rows-1 ללבן)
                 if team == 'w' and dr_signed == -2 and from_row == self._rows - 1:
                     return self._is_path_clear(from_row, from_col, to_row, to_col)
                 if team == 'b' and dr_signed == 2 and from_row == 0:
                     return self._is_path_clear(from_row, from_col, to_row, to_col)
-
                 return False
-            
             return False
 
         if piece_type == 'K': return dr_abs <= 1 and dc_abs <= 1
@@ -119,7 +108,7 @@ class Board:
         return False
 
     def handle_click(self, x: int, y: int):
-        """מטפלת בלחיצות עכבר ומסננת קלטים"""
+        """מטפלת בלחיצות עכבר רגילות ומגנה מפני אש ידידותית וכלים באוויר"""
         if self._game_over:
             return
 
@@ -128,10 +117,6 @@ class Board:
 
         if not (0 <= row < self._rows and 0 <= col < self._cols):
             return
-
-        for pm in self._pending_moves:
-            if (row, col) == pm['from'] or (row, col) == pm['to']:
-                return
 
         clicked_token = self._grid[row][col]
 
@@ -143,14 +128,16 @@ class Board:
         sel_row, sel_col = self._selected_cell
         selected_token = self._grid[sel_row][sel_col]
         
-        is_friendly = (clicked_token != EMPTY_CELL and 
-                       clicked_token[0] == selected_token[0] and 
-                       (row, col) != self._selected_cell)
+        if (row, col) == self._selected_cell:
+            return
+
+        is_friendly = (clicked_token != EMPTY_CELL and clicked_token[0] == selected_token[0])
 
         if is_friendly:
             self._selected_cell = (row, col)
         else:
             if self._is_move_legal(selected_token, sel_row, sel_col, row, col):
+                # תיקון קריטי (איטרציה 14): מניעת מהלך אל תא יעד שחבר קבוצה אחר כבר מכוון או קופץ אליו
                 for pm in self._pending_moves:
                     if pm['to'] == (row, col) and pm['token'][0] == selected_token[0]:
                         self._selected_cell = None
@@ -164,35 +151,62 @@ class Board:
                     'from': (sel_row, sel_col),
                     'to': (row, col),
                     'token': selected_token,
-                    'arrival_time': arrival_time
+                    'arrival_time': arrival_time,
+                    'id': self._move_counter
                 })
+                self._move_counter += 1
+                
+                self._grid[sel_row][sel_col] = EMPTY_CELL
                 self._selected_cell = None
 
+    def handle_jump(self, x: int, y: int):
+        """מטפלת בפקודת הקפיצה הייחודית - הכלי עולה לאוויר וחוזר לאותה משבצת אחרי 1000ms"""
+        if self._game_over:
+            return
+
+        col = x // CELL_SIZE
+        row = y // CELL_SIZE
+
+        if not (0 <= row < self._rows and 0 <= col < self._cols):
+            return
+
+        jumping_token = self._grid[row][col]
+        if jumping_token == EMPTY_CELL:
+            return
+
+        arrival_time = self._game_clock_ms + 1000
+        
+        self._pending_moves.append({
+            'from': (row, col),
+            'to': (row, col),
+            'token': jumping_token,
+            'arrival_time': arrival_time,
+            'id': self._move_counter
+        })
+        self._move_counter += 1
+        
+        self._grid[row][col] = EMPTY_CELL
+        self._selected_cell = None
+
     def handle_wait(self, ms: int):
-        """מקדמת שעון, מבצעת לכידות ומטפלת בהכתרת חייל למלכה בשורה האחרונה"""
+        """מקדמת שעון ומנחיתה כלים לפי סדר עדיפויות שובר שוויון (ותיק באוויר מנצח)"""
         if self._game_over:
             return
 
         self._game_clock_ms += ms
-        self._pending_moves.sort(key=lambda x: x['arrival_time'])
+        
+        self._pending_moves.sort(key=lambda x: (x['arrival_time'], -x['id']))
         remaining_moves = []
 
         for pm in self._pending_moves:
             if self._game_clock_ms >= pm['arrival_time']:
-                from_r, from_c = pm['from']
                 to_r, to_c = pm['to']
                 token = pm['token']
-
-                if self._grid[from_r][from_c] != token:
-                    continue
-
-                self._grid[from_r][from_c] = EMPTY_CELL
                 
                 target_token = self._grid[to_r][to_c]
                 if target_token != EMPTY_CELL and target_token[1].upper() == 'K':
                     self._game_over = True
 
-                # לוגיקת הכתרה
                 final_token = token
                 if token[1].upper() == 'P':
                     if (token[0] == 'w' and to_r == 0) or (token[0] == 'b' and to_r == self._rows - 1):
