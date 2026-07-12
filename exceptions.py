@@ -1,3 +1,3 @@
-class BoardValidationError(Exception):
-    """חריגה עבור שגיאות ולידציה של הלוח"""
+class ChessValidationError(Exception):
+    """שגיאה כללית עבור קלטים לא תקינים במשחק השחמט"""
     pass
