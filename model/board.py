@@ -3,8 +3,9 @@ from model.position import Position
 from model.piece import Piece
 
 class Board:
-    def __init__(self):
-        # מילוי הלוח במיפוי של מיקום (Position) אל כלי (Piece)
+    def __init__(self, num_rows: int = 8, num_cols: int = 8):
+        self.num_rows = num_rows
+        self.num_cols = num_cols
         self._grid: Dict[Position, Piece] = {}
 
     def get_piece(self, position: Position) -> Optional[Piece]:

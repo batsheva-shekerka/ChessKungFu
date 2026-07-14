@@ -29,8 +29,13 @@ class RuleEngine:
         elif piece.piece_type == 'b': # רץ
             return end in PieceRules.get_diagonal_moves(start, self.board)
         elif piece.piece_type == 'q': # מלכה
-            return (end in PieceRules.get_straight_moves(start, self.board) or 
+            return (end in PieceRules.get_straight_moves(start, self.board) or
                     end in PieceRules.get_diagonal_moves(start, self.board))
-        
-        # עבור כלים אחרים (מלך, פרש, רגלי) - ניתן להוסיף את חוקיהם כאן בהמשך
-        return True
+        elif piece.piece_type == 'n': # פרש
+            return end in PieceRules.get_knight_moves(start, self.board)
+        elif piece.piece_type == 'k': # מלך
+            return end in PieceRules.get_king_moves(start, self.board)
+        elif piece.piece_type == 'p': # רגלי
+            return end in PieceRules.get_pawn_moves(start, self.board)
+
+        return False
