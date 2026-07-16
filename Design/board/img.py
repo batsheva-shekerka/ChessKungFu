@@ -52,18 +52,22 @@ class Img:
         h, w = self.img.shape[:2]
         H, W = other_img.img.shape[:2]
 
-        if y + h > H or x + w > W:
-            raise ValueError("Logo does not fit at the specified position.")
+        x0 = max(0, x)
+        y0 = max(0, y)
+        x1 = min(W, x + w)
+        y1 = min(H, y + h)
+        if x0 >= x1 or y0 >= y1:
+            return
 
-        roi = other_img.img[y:y + h, x:x + w]
+        src = self.img[(y0 - y):(y1 - y), (x0 - x):(x1 - x)]
+        roi = other_img.img[y0:y1, x0:x1]
 
         if self.img.shape[2] == 4:
-            b, g, r, a = cv2.split(self.img)
-            mask = a / 255.0
+            mask = src[..., 3] / 255.0
             for c in range(3):
-                roi[..., c] = (1 - mask) * roi[..., c] + mask * self.img[..., c]
+                roi[..., c] = (1 - mask) * roi[..., c] + mask * src[..., c]
         else:
-            other_img.img[y:y + h, x:x + w] = self.img
+            roi[:] = src
 
     def put_text(self, txt, x, y, font_size, color=(255, 255, 255, 255), thickness=1):
         if self.img is None:

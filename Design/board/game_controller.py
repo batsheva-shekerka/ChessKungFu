@@ -80,6 +80,8 @@ class ChessGameController:
     def on_mouse_click(self, event, x, y, flags, param):
         """קליק שמאלי → העברת קואורדינטת הפיקסל לבקר הלוגי הקיים."""
         if event == cv2.EVENT_LBUTTONDOWN and self.input_controller is not None:
+            if self.engine and self.engine.game_over:
+                return
             self.input_controller.click(x, y)
 
     def run(self):
@@ -106,7 +108,14 @@ class ChessGameController:
             else:
                 current_board = self.board
                 motions = []
-            canvas = self.renderer.render(current_board, motions=motions, selected_square=self.input_controller.selected)
+            canvas = self.renderer.render(
+                current_board,
+                motions=motions,
+                selected_square=self.input_controller.selected if self.input_controller else None,
+                scoreboard=self.engine.scoreboard if self.engine else None,
+                game_over=self.engine.game_over if self.engine else False,
+                winner=self.engine.winner if self.engine else None,
+            )
             cv2.imshow(window_name, canvas.img)
 
             if cv2.waitKey(30) == 27:
