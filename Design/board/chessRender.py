@@ -4,6 +4,8 @@ import cv2
 import time
 import numpy as np
 
+WHITE=(255,255,255,255)
+YELLOW=(0, 220, 255, 255)
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
 
@@ -118,10 +120,10 @@ class ChessRenderer:
         canvas.put_text("SCORE", x, y, 0.55, color=(100, 220, 255, 255), thickness=2)
         y += 28
         canvas.put_text(f"White: {scoreboard.plaier1_score}", x, y, 0.5,
-                        color=(255, 255, 255, 255), thickness=2)
+                        color=WHITE, thickness=2)
         y += 28
         canvas.put_text(f"Black: {scoreboard.plaier2_score}", x, y, 0.5,
-                        color=(255, 255, 255, 255), thickness=2)
+                        color=WHITE, thickness=2)
 
         y += 40
         canvas.put_text("WHITE MOVES", x, y, 0.45, color=(180, 180, 180, 255), thickness=1)
@@ -145,14 +147,14 @@ class ChessRenderer:
 
         if winner == 'w':
             msg, sub = "White Wins!", "Congratulations White"
-            sub_color = (255, 255, 255, 255)
+            sub_color = WHITE
         else:
             msg, sub = "Black Wins!", "Congratulations Black"
             sub_color = (210, 210, 210, 255)
 
-        canvas.put_text(msg, 200, 360, 2.2, color=(0, 220, 255, 255), thickness=4)
+        canvas.put_text(msg, 200, 360, 2.2, color=YELLOW, thickness=4)
         canvas.put_text(sub, 215, 430, 0.9, color=sub_color, thickness=2)
-        canvas.put_text("Game Over", 280, 500, 1.0, color=(255, 255, 255, 255), thickness=2)
+        canvas.put_text("Game Over", 280, 500, 1.0, color=WHITE, thickness=2)
 
     def render(self, board, motions=None, selected_square=None,
                scoreboard=None, game_over=False, winner=None) -> Img:

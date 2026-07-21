@@ -8,7 +8,20 @@ class RealTimeArbiter:
     def __init__(self):
         self._active_motions: List[Motion] = []
         self._motion_counter = 0
+    def start_jump(self, piece: Piece, position: Position, duration_ms: int = 1000) -> None:
+        self._motion_counter += 1
+        piece.status = PieceStatus.JUMPING
 
+        new_motion = Motion(
+            motion_id=self._motion_counter,
+            piece=piece,
+            start=position,
+            end=position,         
+            remaining_time=duration_ms,
+            original_duration=duration_ms,
+            is_jump=True
+        )
+        self._active_motions.append(new_motion)
     def start_motion(self, piece: Piece, start: Position, end: Position, duration_ms: int) -> None:
         """משחרר כלי לאוויר ומשנה את מצבו ל-MOVING."""
         self._motion_counter += 1
@@ -60,19 +73,17 @@ class RealTimeArbiter:
         dr_b = s(motion_b.end.row - motion_b.start.row)
         dc_b = s(motion_b.end.col - motion_b.start.col)
 
-        # חייבים לנוע בכיוונים הפוכים בדיוק
         if dr_a + dr_b != 0 or dc_a + dc_b != 0:
             return False
         if dr_a == 0 and dc_a == 0:
             return False
 
-        # מרחק יחסי של B.start מ-A.start
         diff_row = motion_b.start.row - motion_a.start.row
         diff_col = motion_b.start.col - motion_a.start.col
         end_row  = motion_a.end.row   - motion_a.start.row
         end_col  = motion_a.end.col   - motion_a.start.col
 
-        if dr_a == 0:  # תנועה אופקית (אותה שורה)
+        if dr_a == 0: 
             if diff_row != 0:
                 return False
             if dc_a > 0:
@@ -80,7 +91,7 @@ class RealTimeArbiter:
             else:
                 return end_col <= diff_col < 0
 
-        elif dc_a == 0:  # תנועה אנכית (אותה עמודה)
+        elif dc_a == 0:  
             if diff_col != 0:
                 return False
             if dr_a > 0:
@@ -88,7 +99,7 @@ class RealTimeArbiter:
             else:
                 return end_row <= diff_row < 0
 
-        else:  # תנועה אלכסונית
+        else:  
             if diff_row == 0 or diff_col == 0:
                 return False
             if abs(diff_row) != abs(diff_col):
@@ -102,7 +113,10 @@ class RealTimeArbiter:
     def has_active_motion(self) -> bool:
         """מחזיר האם יש כרגע תנועה כלשהי באוויר."""
         return len(self._active_motions) > 0
-
+    
+    def get_active_motions(self):
+        return list(self._active_motions)
+    
     def advance_time(self, ms: int) -> List[Motion]:
         """
         מקדם את שעון המשחק ב-ms מילישניות.
@@ -120,7 +134,6 @@ class RealTimeArbiter:
 
         self._active_motions = still_moving
 
-        # תחילה לפי מי שהגיע קודם, שבירת שוויון לפי מי שנשלח קודם
         completed_motions.sort(key=lambda m: (m.remaining_time, m.motion_id))
 
         return completed_motions

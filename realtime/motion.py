@@ -4,9 +4,10 @@ from model.piece import Piece
 
 @dataclass
 class Motion:
-    motion_id: int        # מזהה ייחודי רציף המשמש לשבירת שוויון (מי ששוגר קודם)
-    piece: Piece          # הכלי שזז
-    start: Position       # משבצת המקור
-    end: Position         # משבצת היעד
-    remaining_time: int   # הזמן שנותר לסיום התנועה במילישניות (ms)
-    original_duration: int  # משך התנועה המקורי (ms) — משמש לשבירת שוויון לפי מהירות פיזית
+    motion_id: int        
+    piece: Piece          
+    start: Position        
+    end: Position          
+    remaining_time: int  
+    original_duration: int 
+    is_jump: bool = False

@@ -26,12 +26,10 @@ class PieceRules:
                 target_piece = board.get_piece(current_pos)
 
                 if target_piece is None or target_piece.status == PieceStatus.MOVING:
-                    # תא ריק או כלי מעופף – אפשר לעבור דרכו
                     moves.add(current_pos)
                 else:
-                    # כלי יציב (IDLE) – עוצר את ההזזה
                     if target_piece.color != start_piece.color:
-                        moves.add(current_pos)  # אפשר להכות
+                        moves.add(current_pos)
                     break
                 r += dr
                 c += dc
@@ -54,7 +52,6 @@ class PieceRules:
                 target_piece = board.get_piece(current_pos)
 
                 if target_piece is None or target_piece.status == PieceStatus.MOVING:
-                    # תא ריק או כלי מעופף – אפשר לעבור דרכו
                     moves.add(current_pos)
                 else:
                     if target_piece.color != start_piece.color:
@@ -117,18 +114,15 @@ class PieceRules:
         direction = -1 if piece.color == 'w' else 1
         start_row = board.num_rows - 2 if piece.color == 'w' else 1
 
-        # צעד קדימה
         one_step = Position(start.row + direction, start.col)
         if PieceRules._in_bounds(one_step.row, one_step.col, board):
             if board.get_piece(one_step) is None:
                 moves.add(one_step)
-                # צעד כפול מהשורה הראשונה
                 two_step = Position(start.row + 2 * direction, start.col)
                 if start.row == start_row and PieceRules._in_bounds(two_step.row, two_step.col, board):
                     if board.get_piece(two_step) is None:
                         moves.add(two_step)
 
-        # הכאה אלכסונית
         for dc in (-1, 1):
             cap = Position(start.row + direction, start.col + dc)
             if PieceRules._in_bounds(cap.row, cap.col, board):

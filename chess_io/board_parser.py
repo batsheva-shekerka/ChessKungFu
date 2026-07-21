@@ -1,4 +1,4 @@
-from typing import List  # <-- 1. להוסיף את השורה הזו בטופ של הקובץ!
+from typing import List 
 from model.board import Board
 from model.position import Position
 from model.piece import Piece
@@ -11,16 +11,13 @@ class BoardParser:
         if not board_lines:
             return Board(num_rows=0, num_cols=0)
 
-        # שמירת אורך השורה הראשונה כבסיס להשוואה
         first_row_tokens = board_lines[0].strip().split()
         expected_cols = len(first_row_tokens)
 
         board = Board(num_rows=len(board_lines), num_cols=expected_cols)
         
-        # רשימת סוגי הכלים המותרים בשחמט
         valid_pieces = {'K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'}
         for row_idx, line in enumerate(board_lines):
-        # פיצול השורה לפי רווחים (מניח שהכלים מופרדים ברווח, למשל 'w_r_1' או '.')
             tokens = line.strip().split()
             if len(tokens) != expected_cols:
                 raise ChessValidationError("ERROR ROW_WIDTH_MISMATCH")
@@ -38,7 +35,6 @@ class BoardParser:
                     color = token[0].lower()
                     piece_type = token[1:].lower()
 
-                # בדיקה עבור Test 4: האם הצבע או סוג הכלי אינם חוקיים?
                 if color not in ('w', 'b') or piece_type not in ('k', 'q', 'r', 'b', 'n', 'p'):
                     raise ChessValidationError("ERROR UNKNOWN_TOKEN")
                 

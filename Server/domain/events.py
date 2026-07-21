@@ -1,0 +1,7 @@
+PLAYER_MOVE = "player_move"
+GAME_OVER = "game_over"
+SCORE_UPDATE = "score_update"
+ROOM_CREATED = "room_created"
+MATCH_FOUND = "match_found"
+PLAYER_DISCONNECTED = "player_disconnected"
+PLAYER_RECONNECTED = "player_reconnected"

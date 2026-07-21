@@ -18,12 +18,10 @@ class RuleEngine:
         if not piece:
             return False
 
-        # בדיקה שהיעד אינו מכיל כלי מאותו הצבע (מניעת אש ידידותית)
         target_piece = self.board.get_piece(end)
         if target_piece and target_piece.color == piece.color:
             return False
 
-        # ניתוב הבדיקה לפי סוג הכלי
         if piece.piece_type == 'r':   # צריח
             return end in PieceRules.get_straight_moves(start, self.board)
         elif piece.piece_type == 'b': # רץ

@@ -1,0 +1,17 @@
+2026-07-21 16:16:34,349 | INFO | WebSocket server listening on ws://localhost:8766
+2026-07-21 16:16:34,743 | INFO | Client connected
+2026-07-21 16:16:34,759 | INFO | Client connected
+2026-07-21 16:16:34,793 | INFO | User logged in | user_id=6e6da9a4-a60d-410d-a031-850fb2586ecc username=alice_test
+2026-07-21 16:16:34,821 | INFO | User logged in | user_id=5f575a71-7c02-406f-9b19-7f825c97c2c8 username=bob_test
+2026-07-21 16:16:34,830 | INFO | Queued for matchmaking | user_id=6e6da9a4-a60d-410d-a031-850fb2586ecc elo=1200
+2026-07-21 16:16:34,842 | INFO | Queued for matchmaking | user_id=5f575a71-7c02-406f-9b19-7f825c97c2c8 elo=1200
+2026-07-21 16:16:34,847 | INFO | Matched room created | room_id=6ce355 white=6e6da9a4-a60d-410d-a031-850fb2586ecc black=5f575a71-7c02-406f-9b19-7f825c97c2c8
+2026-07-21 16:16:34,851 | INFO | Match found | room_id=6ce355 white=6e6da9a4-a60d-410d-a031-850fb2586ecc black=5f575a71-7c02-406f-9b19-7f825c97c2c8
+2026-07-21 16:16:34,860 | INFO | player_move | room_id=6ce355 user_id=6e6da9a4-a60d-410d-a031-850fb2586ecc start=(6, 4) end=(4, 4)
+2026-07-21 16:16:34,869 | INFO | Player disconnected — grace started | room_id=6ce355 user_id=5f575a71-7c02-406f-9b19-7f825c97c2c8 grace=20
+2026-07-21 16:16:34,878 | INFO | Player disconnected — grace started | room_id=6ce355 user_id=6e6da9a4-a60d-410d-a031-850fb2586ecc grace=20
+2026-07-21 16:20:17,269 | INFO | WebSocket server listening on ws://localhost:8765
+2026-07-21 16:20:47,294 | INFO | Client connected
+2026-07-21 16:21:08,244 | INFO | User logged in | user_id=8d2f94da-72f8-4b89-a163-d5ed6746cf33 username=Rachel
+2026-07-21 16:21:27,208 | INFO | Client connected
+2026-07-21 16:21:40,693 | INFO | User logged in | user_id=4ef1eea9-a491-4ec8-98a6-e787e8fae19e username=Sara
