@@ -15,13 +15,18 @@ if PROJECT_ROOT not in sys.path:
 
 from application.auth_service import AuthService
 from application.game_service import GameService
+from application.lobby_service import LobbyService
 from application.matchmaking_service import MatchmakingService
 from application.room_service import RoomService
+from application.server_runtime import ServerRuntime
+from application.session_service import SessionService
 from bootstrap.logging_setup import create_server_logger
-from domain import events
+from domain.events import EventType
 from infrastructure.async_event_bus import AsyncEventBus
 from infrastructure.db.session_repository import SessionRepository
 from infrastructure.db.user_repository import UserRepository
+from infrastructure.game.board_loader import InputTxtBoardLoader
+from infrastructure.game.engine_adapter import KungFuEngineFactory
 from protocol import encode, make_disconnect_countdown, make_game_over
 from transport.connection_registry import ConnectionRegistry
 from transport.message_router import MessageRouter
@@ -31,6 +36,7 @@ from transport.websocket_server import WebSocketServerApp
 @dataclass
 class AppContainer:
     server: WebSocketServerApp
+    runtime: ServerRuntime
     logger: Any
 
 
@@ -40,7 +46,9 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
 
     users = UserRepository(db_path)
     sessions = SessionRepository(db_path)
-    registry = ConnectionRegistry()
+    registry = ConnectionRegistry(logger=logger)
+    # Concrete infra adapters satisfy application.ports (UserStore, SessionStore,
+    # EventPublisher, AppLogger) via structural typing / Protocols.
 
     def on_bus_error(event_type: str, exc: BaseException) -> None:
         logger.error(f"Event listener failed for {event_type}", exc=exc)
@@ -53,8 +61,8 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     async def log_game_over(**payload: Any) -> None:
         logger.info("game_over", **payload)
 
-    bus.subscribe(events.PLAYER_MOVE, log_move)
-    bus.subscribe(events.GAME_OVER, log_game_over)
+    bus.subscribe(EventType.PLAYER_MOVE.value, log_move)
+    bus.subscribe(EventType.GAME_OVER.value, log_game_over)
 
     games_holder: dict[str, GameService] = {}
 
@@ -69,14 +77,9 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
             return
         await registry.broadcast_users(list(room.members.keys()), message)
 
-    async def broadcast_to_user(user_id: str, message: str) -> None:
-        await registry.send_to_user(user_id, message)
-
     rooms = RoomService(
         logger=logger,
         on_room_created=on_room_created,
-        broadcast_to_user=broadcast_to_user,
-        broadcast_room=broadcast_room,
     )
 
     def get_room_players_for_elo(room_id: str):
@@ -91,10 +94,11 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
         return white_id, black_id, white_name, black_name
 
     games = GameService(
-        project_root=PROJECT_ROOT,
         users=users,
         bus=bus,
         logger=logger,
+        rooms=rooms,
+        engine_factory=KungFuEngineFactory(InputTxtBoardLoader(PROJECT_ROOT)),
         get_room_players=get_room_players_for_elo,
         is_elo_updated=rooms.is_elo_updated,
         mark_elo_updated=rooms.mark_elo_updated,
@@ -117,16 +121,26 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     )
 
     auth = AuthService(users=users, sessions=sessions)
+    sessions_uc = SessionService(auth=auth, rooms=rooms, logger=logger)
+    lobby = LobbyService(rooms=rooms, matchmaking=matchmaking, logger=logger)
 
     router = MessageRouter(
-        auth=auth,
-        rooms=rooms,
+        sessions=sessions_uc,
+        lobby=lobby,
         games=games,
-        matchmaking=matchmaking,
         registry=registry,
-        users=users,
-        bus=bus,
         logger=logger,
+    )
+
+    runtime = ServerRuntime(
+        matchmaking=matchmaking,
+        games=games,
+        rooms=rooms,
+        logger=logger,
+        broadcast_users=registry.broadcast_users,
+        encode_fn=encode,
+        make_game_over_fn=make_game_over,
+        make_disconnect_countdown_fn=make_disconnect_countdown,
     )
 
     server = WebSocketServerApp(
@@ -134,13 +148,7 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
         port=port,
         registry=registry,
         router=router,
-        rooms=rooms,
-        matchmaking=matchmaking,
-        games=games,
-        users=users,
         logger=logger,
-        encode_fn=encode,
-        make_game_over_fn=make_game_over,
-        make_disconnect_countdown_fn=make_disconnect_countdown,
+        on_client_disconnected=runtime.on_client_disconnected,
     )
-    return AppContainer(server=server, logger=logger)
+    return AppContainer(server=server, runtime=runtime, logger=logger)

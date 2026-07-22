@@ -52,6 +52,7 @@ class Room:
     elo_updated: bool = False
     game_started: bool = False
 
+    #return only the players in the room
     def player_ids(self) -> list[str]:
         return [
             uid
@@ -64,16 +65,20 @@ class Room:
         if member is None:
             return None
         if member.role == PlayerRole.WHITE:
-            return "w"
+            return PlayerRole.WHITE.value
         if member.role == PlayerRole.BLACK:
-            return "b"
+            return PlayerRole.BLACK.value
         return None
 
     def opponent_of(self, user_id: str) -> Optional[str]:
         my_color = self.color_of(user_id)
         if my_color is None:
             return None
-        want = "b" if my_color == "w" else "w"
+        want = (
+            PlayerRole.BLACK.value
+            if my_color == PlayerRole.WHITE.value
+            else PlayerRole.WHITE.value
+        )
         for uid in self.player_ids():
             if self.color_of(uid) == want:
                 return uid

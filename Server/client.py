@@ -2,6 +2,7 @@ import asyncio
 import websockets
 
 from protocol import (
+    MessageType,
     ProtocolError,
     decode,
     encode,
@@ -27,6 +28,116 @@ def parse_user_move(user_input: str):
     return (start_row, start_col), (end_row, end_col)
 
 
+def _on_login_ok(data: dict, session: dict) -> None:
+    session["token"] = data.get("token")
+    session["user_id"] = data.get("user_id")
+    print(
+        f"\n[CLIENT] Login OK as: {data.get('username')} "
+        f"(user_id={data.get('user_id')}, ELO={data.get('elo')})"
+    )
+    print(f"[CLIENT] Token: {session['token']}")
+
+
+def _on_auth_ok(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Auth OK: {data.get('username')} "
+        f"(ELO={data.get('elo')})"
+    )
+
+
+def _on_room_created(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Room created: {data.get('room_id')} "
+        f"(you are {data.get('color')})"
+    )
+
+
+def _on_room_joined(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Joined room {data.get('room_id')} "
+        f"as {data.get('role')}"
+    )
+
+
+def _on_rejoined_room(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Rejoined room {data.get('room_id')} "
+        f"as {data.get('color')}"
+    )
+
+
+def _on_play_queued(data: dict, session: dict) -> None:
+    print(f"\n[CLIENT] Looking for opponent... ({data.get('status')})")
+
+
+def _on_match_found(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Match found! room={data.get('room_id')} "
+        f"color={data.get('color')}"
+    )
+
+
+def _on_match_timeout(data: dict, session: dict) -> None:
+    print(f"\n[CLIENT] Matchmaking timeout: {data.get('reason')}")
+
+
+def _on_disconnect_countdown(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Disconnect countdown: "
+        f"{data.get('seconds_left')}s "
+        f"(user={data.get('user_id')})"
+    )
+
+
+def _on_ack(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Move accepted: "
+        f"{data.get('start')} -> {data.get('end')}"
+    )
+
+
+def _on_state(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] State | score={data.get('score')} "
+        f"game_over={data.get('game_over')} "
+        f"pieces={len(data.get('pieces', []))}"
+    )
+
+
+def _on_game_over(data: dict, session: dict) -> None:
+    print(f"\n[CLIENT] GAME OVER! Winner: {data.get('winner')}")
+    print(f"[CLIENT] New ratings: {data.get('ratings')}")
+
+
+def _on_error(data: dict, session: dict) -> None:
+    print(f"\n[CLIENT] Error: {data.get('reason')}")
+
+
+def _on_welcome(data: dict, session: dict) -> None:
+    print(
+        f"\n[CLIENT] Welcome! You are: {data.get('color')} "
+        f"(players: {data.get('player_count')})"
+    )
+
+
+_MESSAGE_HANDLERS = {
+    MessageType.LOGIN_OK.value: _on_login_ok,
+    MessageType.AUTH_OK.value: _on_auth_ok,
+    MessageType.ROOM_CREATED.value: _on_room_created,
+    MessageType.ROOM_JOINED.value: _on_room_joined,
+    MessageType.REJOINED_ROOM.value: _on_rejoined_room,
+    MessageType.PLAY_QUEUED.value: _on_play_queued,
+    MessageType.MATCH_FOUND.value: _on_match_found,
+    MessageType.MATCH_TIMEOUT.value: _on_match_timeout,
+    MessageType.DISCONNECT_COUNTDOWN.value: _on_disconnect_countdown,
+    MessageType.ACK.value: _on_ack,
+    MessageType.STATE.value: _on_state,
+    MessageType.GAME_OVER.value: _on_game_over,
+    MessageType.ERROR.value: _on_error,
+    MessageType.WELCOME.value: _on_welcome,
+}
+
+
 async def listen_to_server(websocket, session: dict):
     try:
         async for raw in websocket:
@@ -37,72 +148,11 @@ async def listen_to_server(websocket, session: dict):
                 continue
 
             msg_type = data.get("type")
-            if msg_type == "login_ok":
-                session["token"] = data.get("token")
-                session["user_id"] = data.get("user_id")
-                print(
-                    f"\n[CLIENT] Login OK as: {data.get('username')} "
-                    f"(user_id={data.get('user_id')}, ELO={data.get('elo')})"
-                )
-                print(f"[CLIENT] Token: {session['token']}")
-            elif msg_type == "auth_ok":
-                print(
-                    f"\n[CLIENT] Auth OK: {data.get('username')} "
-                    f"(ELO={data.get('elo')})"
-                )
-            elif msg_type == "room_created":
-                print(
-                    f"\n[CLIENT] Room created: {data.get('room_id')} "
-                    f"(you are {data.get('color')})"
-                )
-            elif msg_type == "room_joined":
-                print(
-                    f"\n[CLIENT] Joined room {data.get('room_id')} "
-                    f"as {data.get('role')}"
-                )
-            elif msg_type == "rejoined_room":
-                print(
-                    f"\n[CLIENT] Rejoined room {data.get('room_id')} "
-                    f"as {data.get('color')}"
-                )
-            elif msg_type == "play_queued":
-                print(f"\n[CLIENT] Looking for opponent... ({data.get('status')})")
-            elif msg_type == "match_found":
-                print(
-                    f"\n[CLIENT] Match found! room={data.get('room_id')} "
-                    f"color={data.get('color')}"
-                )
-            elif msg_type == "match_timeout":
-                print(f"\n[CLIENT] Matchmaking timeout: {data.get('reason')}")
-            elif msg_type == "disconnect_countdown":
-                print(
-                    f"\n[CLIENT] Disconnect countdown: "
-                    f"{data.get('seconds_left')}s "
-                    f"(user={data.get('user_id')})"
-                )
-            elif msg_type == "ack":
-                print(
-                    f"\n[CLIENT] Move accepted: "
-                    f"{data.get('start')} -> {data.get('end')}"
-                )
-            elif msg_type == "state":
-                print(
-                    f"\n[CLIENT] State | score={data.get('score')} "
-                    f"game_over={data.get('game_over')} "
-                    f"pieces={len(data.get('pieces', []))}"
-                )
-            elif msg_type == "game_over":
-                print(f"\n[CLIENT] GAME OVER! Winner: {data.get('winner')}")
-                print(f"[CLIENT] New ratings: {data.get('ratings')}")
-            elif msg_type == "error":
-                print(f"\n[CLIENT] Error: {data.get('reason')}")
-            elif msg_type == "welcome":
-                print(
-                    f"\n[CLIENT] Welcome! You are: {data.get('color')} "
-                    f"(players: {data.get('player_count')})"
-                )
-            else:
+            handler = _MESSAGE_HANDLERS.get(msg_type)
+            if handler is None:
                 print(f"\n[CLIENT] Received: {data}")
+            else:
+                handler(data, session)
     except websockets.exceptions.ConnectionClosed:
         print("\n[CLIENT] Connection closed by server.")
 

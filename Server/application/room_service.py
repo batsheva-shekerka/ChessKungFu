@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import secrets
 import time
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from domain.models import ConnectionStatus, PlayerRole, Room, RoomMember
-from infrastructure.logging.error_logger import ServerLogger
+from application.ports import AppLogger
 
 
 DISCONNECT_GRACE_SECONDS = 20
@@ -14,17 +14,13 @@ DISCONNECT_GRACE_SECONDS = 20
 class RoomService:
     def __init__(
         self,
-        logger: ServerLogger,
+        logger: AppLogger,
         on_room_created: Callable[[str], None],
-        broadcast_to_user: Callable[[str, str], Any],
-        broadcast_room: Callable[[str, str], Any],
     ):
         self._rooms: dict[str, Room] = {}
         self._user_room: dict[str, str] = {}
         self._logger = logger
         self._on_room_created = on_room_created
-        self._broadcast_to_user = broadcast_to_user
-        self._broadcast_room = broadcast_room
 
     def get_room(self, room_id: str) -> Optional[Room]:
         return self._rooms.get(room_id)
@@ -147,6 +143,15 @@ class RoomService:
         member.disconnect_deadline = None
         self._logger.info("Player reconnected", room_id=room_id, user_id=user_id)
         return room_id
+
+    def clear_disconnect_deadline(self, room_id: str, user_id: str) -> None:
+        room = self._rooms.get(room_id)
+        if room is None:
+            return
+        member = room.members.get(user_id)
+        if member is None:
+            return
+        member.disconnect_deadline = None
 
     def expired_disconnects(self) -> list[tuple[str, str]]:
         """Returns list of (room_id, user_id) whose grace expired."""

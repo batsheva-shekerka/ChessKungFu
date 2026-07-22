@@ -4,6 +4,7 @@ Compatibility shim — prefer infrastructure.db.user_repository.
 
 from __future__ import annotations
 
+from domain.elo import calc_elo as _calc_elo
 from infrastructure.db.user_repository import (
     START_ELO,
     UserRepository,
@@ -45,4 +46,4 @@ def set_elo(username: str, elo: int) -> None:
 
 
 def calc_elo(winner_elo: int, loser_elo: int, k: int = 32):
-    return UserRepository.calc_elo(winner_elo, loser_elo, k)
+    return _calc_elo(winner_elo, loser_elo, k)

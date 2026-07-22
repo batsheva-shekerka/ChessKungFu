@@ -15,6 +15,7 @@ from bootstrap.wiring import create_app
 
 async def main() -> None:
     container = create_app()
+    asyncio.create_task(container.runtime.run())
     await container.server.run()
 
 

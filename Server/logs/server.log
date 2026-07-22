@@ -15,3 +15,75 @@
 2026-07-21 16:21:08,244 | INFO | User logged in | user_id=8d2f94da-72f8-4b89-a163-d5ed6746cf33 username=Rachel
 2026-07-21 16:21:27,208 | INFO | Client connected
 2026-07-21 16:21:40,693 | INFO | User logged in | user_id=4ef1eea9-a491-4ec8-98a6-e787e8fae19e username=Sara
+2026-07-22 11:00:34,455 | INFO | WebSocket server listening on ws://localhost:8767
+2026-07-22 11:00:34,816 | INFO | Client connected
+2026-07-22 11:00:34,826 | INFO | Client connected
+2026-07-22 11:00:34,846 | INFO | User logged in | user_id=256d928d-40c8-4081-975b-f8bfeaca32ba username=rt_a
+2026-07-22 11:00:34,864 | INFO | User logged in | user_id=2cfe4b5e-9d2f-4dd1-b005-176f32bd9c1a username=rt_b
+2026-07-22 11:00:34,868 | INFO | Queued for matchmaking | user_id=256d928d-40c8-4081-975b-f8bfeaca32ba elo=1200
+2026-07-22 11:00:34,873 | INFO | Queued for matchmaking | user_id=2cfe4b5e-9d2f-4dd1-b005-176f32bd9c1a elo=1200
+2026-07-22 11:00:34,919 | INFO | Matched room created | room_id=5b3e92 white=256d928d-40c8-4081-975b-f8bfeaca32ba black=2cfe4b5e-9d2f-4dd1-b005-176f32bd9c1a
+2026-07-22 11:00:34,920 | INFO | Match found | room_id=5b3e92 white=256d928d-40c8-4081-975b-f8bfeaca32ba black=2cfe4b5e-9d2f-4dd1-b005-176f32bd9c1a
+2026-07-22 11:00:34,926 | INFO | player_move | room_id=5b3e92 user_id=256d928d-40c8-4081-975b-f8bfeaca32ba start=(6, 4) end=(4, 4)
+2026-07-22 11:00:34,932 | INFO | Player disconnected - grace started | room_id=5b3e92 user_id=2cfe4b5e-9d2f-4dd1-b005-176f32bd9c1a grace=20
+2026-07-22 11:00:34,937 | INFO | Player disconnected - grace started | room_id=5b3e92 user_id=256d928d-40c8-4081-975b-f8bfeaca32ba grace=20
+2026-07-22 11:34:07,641 | INFO | WebSocket server listening on ws://localhost:8768
+2026-07-22 11:34:08,026 | INFO | Client connected
+2026-07-22 11:34:08,043 | INFO | Client connected
+2026-07-22 11:34:08,081 | INFO | User logged in | user_id=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd username=port_a
+2026-07-22 11:34:08,111 | INFO | User logged in | user_id=50a7f2a3-daac-46fe-88b9-021ab5a70fce username=port_b
+2026-07-22 11:34:08,121 | INFO | Queued for matchmaking | user_id=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd elo=1200
+2026-07-22 11:34:08,134 | INFO | Queued for matchmaking | user_id=50a7f2a3-daac-46fe-88b9-021ab5a70fce elo=1200
+2026-07-22 11:34:08,136 | INFO | Matched room created | room_id=e999b0 white=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd black=50a7f2a3-daac-46fe-88b9-021ab5a70fce
+2026-07-22 11:34:08,138 | INFO | Match found | room_id=e999b0 white=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd black=50a7f2a3-daac-46fe-88b9-021ab5a70fce
+2026-07-22 11:34:08,146 | INFO | player_move | room_id=e999b0 user_id=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd start=(6, 4) end=(4, 4)
+2026-07-22 11:34:08,156 | INFO | Player disconnected - grace started | room_id=e999b0 user_id=50a7f2a3-daac-46fe-88b9-021ab5a70fce grace=20
+2026-07-22 11:34:08,162 | INFO | Player disconnected - grace started | room_id=e999b0 user_id=e6b33dcd-a8a9-4971-9afc-9e35b0e829dd grace=20
+2026-07-22 12:43:07,185 | INFO | WebSocket server listening on ws://localhost:8769
+2026-07-22 12:43:07,700 | INFO | Client connected
+2026-07-22 12:43:07,714 | INFO | Client connected
+2026-07-22 12:43:07,750 | INFO | User logged in | user_id=ff08aee1-e138-400a-84df-b6d1392d80f3 username=stepb_a
+2026-07-22 12:43:07,779 | INFO | User logged in | user_id=0db451a0-b2fb-4086-be73-549df15b39a6 username=stepb_b
+2026-07-22 12:43:07,787 | INFO | Queued for matchmaking | user_id=ff08aee1-e138-400a-84df-b6d1392d80f3 elo=1200
+2026-07-22 12:43:07,794 | INFO | Queued for matchmaking | user_id=0db451a0-b2fb-4086-be73-549df15b39a6 elo=1200
+2026-07-22 12:43:07,812 | INFO | Matched room created | room_id=c23208 white=ff08aee1-e138-400a-84df-b6d1392d80f3 black=0db451a0-b2fb-4086-be73-549df15b39a6
+2026-07-22 12:43:07,817 | INFO | Match found | room_id=c23208 white=ff08aee1-e138-400a-84df-b6d1392d80f3 black=0db451a0-b2fb-4086-be73-549df15b39a6
+2026-07-22 12:43:07,823 | INFO | player_move | room_id=c23208 user_id=ff08aee1-e138-400a-84df-b6d1392d80f3 start=(6, 4) end=(4, 4)
+2026-07-22 12:43:07,828 | INFO | Player disconnected - grace started | room_id=c23208 user_id=0db451a0-b2fb-4086-be73-549df15b39a6 grace=20
+2026-07-22 12:43:07,835 | INFO | Player disconnected - grace started | room_id=c23208 user_id=ff08aee1-e138-400a-84df-b6d1392d80f3 grace=20
+2026-07-22 14:02:09,658 | INFO | WebSocket server listening on ws://localhost:8770
+2026-07-22 14:02:10,222 | INFO | Client connected
+2026-07-22 14:02:10,264 | INFO | Client connected
+2026-07-22 14:02:10,312 | INFO | User logged in | user_id=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 username=stepc_a
+2026-07-22 14:02:10,351 | INFO | User logged in | user_id=d200f45c-f6a3-4666-ae77-3a81827d068a username=stepc_b
+2026-07-22 14:02:10,383 | INFO | Queued for matchmaking | user_id=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 elo=1200
+2026-07-22 14:02:10,412 | INFO | Queued for matchmaking | user_id=d200f45c-f6a3-4666-ae77-3a81827d068a elo=1200
+2026-07-22 14:02:10,420 | INFO | Matched room created | room_id=0b4085 white=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 black=d200f45c-f6a3-4666-ae77-3a81827d068a
+2026-07-22 14:02:10,424 | INFO | Match found | room_id=0b4085 white=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 black=d200f45c-f6a3-4666-ae77-3a81827d068a
+2026-07-22 14:02:10,595 | INFO | player_move | room_id=0b4085 user_id=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 start=(6, 4) end=(4, 4)
+2026-07-22 14:02:10,710 | INFO | Player disconnected - grace started | room_id=0b4085 user_id=d200f45c-f6a3-4666-ae77-3a81827d068a grace=20
+2026-07-22 14:02:10,770 | INFO | Player disconnected - grace started | room_id=0b4085 user_id=5ae0b1d6-ecf5-4b98-a677-2940ca55cf25 grace=20
+2026-07-22 14:17:47,092 | INFO | WebSocket server listening on ws://localhost:8771
+2026-07-22 14:17:47,522 | INFO | Client connected
+2026-07-22 14:17:47,544 | INFO | Client connected
+2026-07-22 14:17:47,584 | INFO | User logged in | user_id=2c2054fe-c603-41bf-b304-49bd6aa98276 username=stepe_a
+2026-07-22 14:17:47,835 | INFO | User logged in | user_id=cca767a5-efcb-4ade-ba9d-f27883ff6933 username=stepe_b
+2026-07-22 14:17:47,849 | INFO | Queued for matchmaking | user_id=2c2054fe-c603-41bf-b304-49bd6aa98276 elo=1200
+2026-07-22 14:17:47,863 | INFO | Queued for matchmaking | user_id=cca767a5-efcb-4ade-ba9d-f27883ff6933 elo=1200
+2026-07-22 14:17:47,917 | INFO | Matched room created | room_id=6fe9e7 white=2c2054fe-c603-41bf-b304-49bd6aa98276 black=cca767a5-efcb-4ade-ba9d-f27883ff6933
+2026-07-22 14:17:47,922 | INFO | Match found | room_id=6fe9e7 white=2c2054fe-c603-41bf-b304-49bd6aa98276 black=cca767a5-efcb-4ade-ba9d-f27883ff6933
+2026-07-22 14:17:47,935 | INFO | player_move | room_id=6fe9e7 user_id=2c2054fe-c603-41bf-b304-49bd6aa98276 start=(6, 4) end=(4, 4)
+2026-07-22 14:17:47,951 | INFO | Player disconnected - grace started | room_id=6fe9e7 user_id=cca767a5-efcb-4ade-ba9d-f27883ff6933 grace=20
+2026-07-22 14:17:47,957 | INFO | Player disconnected - grace started | room_id=6fe9e7 user_id=2c2054fe-c603-41bf-b304-49bd6aa98276 grace=20
+2026-07-22 14:53:19,334 | INFO | WebSocket server listening on ws://localhost:8772
+2026-07-22 14:53:19,823 | INFO | Client connected
+2026-07-22 14:53:19,854 | INFO | Client connected
+2026-07-22 14:53:19,953 | INFO | User logged in | user_id=e8623fca-de25-41d6-892e-93350f4c10ff username=clean_a
+2026-07-22 14:53:20,129 | INFO | User logged in | user_id=cc37229f-8dcf-4f85-a08f-3e7e380a6d1b username=clean_b
+2026-07-22 14:53:20,195 | INFO | Queued for matchmaking | user_id=e8623fca-de25-41d6-892e-93350f4c10ff elo=1200
+2026-07-22 14:53:20,269 | INFO | Queued for matchmaking | user_id=cc37229f-8dcf-4f85-a08f-3e7e380a6d1b elo=1200
+2026-07-22 14:53:20,326 | INFO | Matched room created | room_id=559885 white=e8623fca-de25-41d6-892e-93350f4c10ff black=cc37229f-8dcf-4f85-a08f-3e7e380a6d1b
+2026-07-22 14:53:20,339 | INFO | Match found | room_id=559885 white=e8623fca-de25-41d6-892e-93350f4c10ff black=cc37229f-8dcf-4f85-a08f-3e7e380a6d1b
+2026-07-22 14:53:20,361 | INFO | player_move | room_id=559885 user_id=e8623fca-de25-41d6-892e-93350f4c10ff start=(6, 4) end=(4, 4)
+2026-07-22 14:53:20,391 | INFO | Player disconnected - grace started | room_id=559885 user_id=cc37229f-8dcf-4f85-a08f-3e7e380a6d1b grace=20
+2026-07-22 14:53:20,416 | INFO | Player disconnected - grace started | room_id=559885 user_id=e8623fca-de25-41d6-892e-93350f4c10ff grace=20

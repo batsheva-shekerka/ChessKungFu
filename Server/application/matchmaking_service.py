@@ -3,8 +3,9 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Optional
 
-from domain.models import QueueEntry
-from infrastructure.logging.error_logger import ServerLogger
+from domain.models import PlayerRole, QueueEntry
+from application.ports import AppLogger
+from protocol import MatchFoundMessage, MatchTimeoutMessage
 
 ELO_WINDOW = 100
 QUEUE_TIMEOUT_SECONDS = 60
@@ -13,7 +14,7 @@ QUEUE_TIMEOUT_SECONDS = 60
 class MatchmakingService:
     def __init__(
         self,
-        logger: ServerLogger,
+        logger: AppLogger,
         create_matched_room: Callable[[str, str], Any],
         notify_user: Callable[[str, dict], Any],
         get_elo: Callable[[str], int],
@@ -51,7 +52,9 @@ class MatchmakingService:
             if now - entry.enqueued_at >= QUEUE_TIMEOUT_SECONDS:
                 await self._notify_user(
                     entry.user_id,
-                    {"type": "match_timeout", "reason": "no opponent within 60 seconds"},
+                    MatchTimeoutMessage(
+                        reason="no opponent within 60 seconds"
+                    ).to_dict(),
                 )
                 self._logger.info("Matchmaking timeout", user_id=entry.user_id)
             else:
@@ -81,16 +84,29 @@ class MatchmakingService:
             used.add(a.user_id)
             used.add(match.user_id)
             room = self._create_matched_room(a.user_id, match.user_id)
-            payload = {
-                "type": "match_found",
-                "room_id": room.room_id,
-                "players": {
-                    "w": a.user_id,
-                    "b": match.user_id,
+            base = MatchFoundMessage(
+                room_id=room.room_id,
+                players={
+                    PlayerRole.WHITE.value: a.user_id,
+                    PlayerRole.BLACK.value: match.user_id,
                 },
-            }
-            await self._notify_user(a.user_id, {**payload, "color": "w"})
-            await self._notify_user(match.user_id, {**payload, "color": "b"})
+            )
+            await self._notify_user(
+                a.user_id,
+                MatchFoundMessage(
+                    room_id=base.room_id,
+                    players=base.players,
+                    color=PlayerRole.WHITE.value,
+                ).to_dict(),
+            )
+            await self._notify_user(
+                match.user_id,
+                MatchFoundMessage(
+                    room_id=base.room_id,
+                    players=base.players,
+                    color=PlayerRole.BLACK.value,
+                ).to_dict(),
+            )
             self._logger.info(
                 "Match found",
                 room_id=room.room_id,

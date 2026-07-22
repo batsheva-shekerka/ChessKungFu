@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Optional, Protocol
+
+
+class SendFailureLogger(Protocol):
+    def warning(self, message: str, **ctx: Any) -> None: ...
 
 
 @dataclass
@@ -18,9 +22,10 @@ class ConnectionContext:
 
 
 class ConnectionRegistry:
-    def __init__(self):
+    def __init__(self, logger: Optional[SendFailureLogger] = None):
         self._by_ws: dict[Any, ConnectionContext] = {}
         self._by_user: dict[str, ConnectionContext] = {}
+        self._logger = logger
 
     def add(self, websocket: Any) -> ConnectionContext:
         ctx = ConnectionContext(websocket=websocket)
@@ -56,8 +61,13 @@ class ConnectionRegistry:
             return
         try:
             await ctx.websocket.send(message)
-        except Exception:
-            pass
+        except Exception as exc:
+            if self._logger is not None:
+                self._logger.warning(
+                    "Failed to send message to user",
+                    user_id=user_id,
+                    error=str(exc),
+                )
 
     async def broadcast_users(self, user_ids: list[str], message: str) -> None:
         for uid in user_ids:

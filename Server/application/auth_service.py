@@ -4,9 +4,8 @@ import secrets
 from dataclasses import dataclass
 from typing import Optional
 
+from application.ports import SessionStore, UserStore
 from domain.models import User
-from infrastructure.db.session_repository import SessionRepository
-from infrastructure.db.user_repository import UserRepository
 
 
 @dataclass
@@ -20,8 +19,8 @@ class LoginResult:
 class AuthService:
     def __init__(
         self,
-        users: UserRepository,
-        sessions: SessionRepository,
+        users: UserStore,
+        sessions: SessionStore,
     ):
         self._users = users
         self._sessions = sessions
