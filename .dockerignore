@@ -1,0 +1,29 @@
+# Git / IDE
+.git
+.gitignore
+.cursor
+.vscode
+
+# Python junk
+**/__pycache__
+**/*.pyc
+.venv
+venv
+**/.pytest_cache
+
+# Local runtime data (created fresh in container)
+Server/users.db
+Server/logs/*.log
+
+# Client / UI assets not needed to run the server
+Design/
+tests/
+texttests/
+main.py
+README.md
+Server_Design.md
+Server/client.py
+
+# Large / unrelated
+**/*.png
+**/*.jpg

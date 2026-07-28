@@ -1,0 +1,63 @@
+# KungFu Chess — small working stack (Docker Compose)
+#
+# Usage (from repo root, with Docker Desktop running):
+#   docker compose up --build
+#   docker compose down
+#
+# Game clients connect to: ws://localhost:8765
+#
+# Note: the game-server still uses its built-in SQLite for users today.
+# Redis + Postgres are brought up here so the stack matches Server_Design.md
+# and is ready for the next integration step.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kungfu
+      POSTGRES_PASSWORD: kungfu
+      POSTGRES_DB: kungfu_chess
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kungfu -d kungfu_chess"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  game-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kungfu-chess-server:local
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8765"
+      # Reserved for future wiring (see Server_Design.md):
+      REDIS_URL: "redis://redis:6379/0"
+      DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    ports:
+      - "8765:8765"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

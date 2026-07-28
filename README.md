@@ -50,6 +50,29 @@ WebSocket server listening on ws://localhost:8765
 
 השאירו את הטרמינל הזה פתוח.
 
+### הרצה עם Docker Compose (מומלץ לגרסת הלימוד)
+
+דורש Docker Desktop פתוח. מתיקיית השורש:
+
+```bash
+docker compose up --build
+```
+
+זה מריץ:
+- **game-server** על פורט `8765` (WebSocket)
+- **Redis** על פורט `6379`
+- **Postgres** על פורט `5432`
+
+עצירה:
+
+```bash
+docker compose down
+```
+
+הקליינט הגרפי רץ מקומית כמו קודם (`py -3 Design/board/main_design.py`) ומתחבר ל-`ws://localhost:8765`.
+
+> כרגע השרת עדיין שומר משתמשים ב-SQLite בתוך הקונטיינר. Redis ו-Postgres עולים כחלק מהסטאק ומוכנים לחיבור לפי `Server_Design.md`.
+
 ### 2. הפעלת הגרפיקה (קליינט)
 
 מתיקיית השורש של הפרויקט, בטרמינל נפרד:

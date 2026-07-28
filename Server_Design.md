@@ -1,76 +1,249 @@
-# מפרט עיצוב מערכת: ארכיטקטורת ענן בקנה מידה רחב (System Design Specification)
+# Server Design — KungFu Chess (Scalable Real-Time)
 
 ## סקירה כללית
-מסמך זה מתאר את ארכיטקטורת הענן עבור מערכת משחקים מרובת משתתפים בזמן אמת, המיועדת לתמוך ב-100 מיליון משתמשים רשומים ובעד 10 מיליון שחקנים פעילים בו-זמנית ברחבי העולם.
+
+מסמך זה מתאר את עיצוב צד השרת למשחק KungFu Chess מרובה משתתפים בזמן אמת.
+
+**יעד סקייל (ייצור מלא):** עד ~100M משתמשים רשומים ו-~10M שחקנים פעילים בו-זמנית.  
+**יעד לימודי עכשיו:** גרסה קטנה שעובדת (Docker Compose) עם אותה חלוקת אחריות — בלי לבנות את כל הענן בבת אחת.
+
+### עקרון יסוד (Single Source of Truth)
+
+* ה-**Client לא מחליט** על חוקי המשחק.
+* ה-**Gateway לא מחליט** על חוקי המשחק.
+* רק ה-**GameEngine** בתוך **Game Server Shard** הוא authoritative: מהלכים חוקיים, מצב לוח, סיום משחק.
+
+הקליינט שולח כוונות (`move`, `play`, `join`); השרת מאמת ומפיץ `ack` / `state` / `game_over`.
 
 ---
 
-## 1. ארכיטקטורת מסדי נתונים (100M משתמשים רשומים)
+## 1. רכיבי המערכת
 
-### הערכת SQLite
-* **מסקנה:** אינו מתאים לסביבת ייצור בקנה מידה כזה.
-* **נימוק:** SQLite משתמש במנגנון נעילת קובץ יחיד לכתיבות. תחת עומס מקבילי של מיליוני משתמשים (הרשמה, סשנים, עדכון Elo) הנעילה תגרום לעלייה חדה בזמני תגובה ולצוואר בקבוק — ולעיתים לאי-זמינות.
+| רכיב | אחריות | מה הוא *לא* עושה |
+|------|--------|-------------------|
+| **API Gateway** | פעולות שאינן זמן-אמת: `login`, ניהול rooms (יצירה/מידע), היסטוריית משחקים, פרופיל / Elo | לא מריץ לוח, לא מאשר מהלכים |
+| **WebSocket Gateway** | מחזיק חיבורים חיים מול הלקוח; מאמת session/token; מנתב הודעות real-time; דוחף state updates ללקוח | לא מריץ GameEngine; לא בוחר חוקים |
+| **Matchmaker** | מחבר שחקנים לפי Elo / זמן המתנה; מוציא זוג מוכן למשחק | לא מריץ את המשחק עצמו |
+| **Game Allocator** | מחליט **באיזה Game Server Shard** ירוץ כל `room` (לפי עומס / hash / זמינות) ורושם `room_id → shard` | לא משחק את המהלכים |
+| **Game Server Shards** | מריצים rooms ב-RAM; כל shard מחזיק GameEngine authoritative + tick | לא שומרים כל מהלך ל-DB בזמן אמת |
+| **Observability** | logs, metrics, health checks, עומסי בדיקה (load tests) | לא חלק מלוגיקת המשחק |
 
-### אסטרטגיית מסדי נתונים מומלצת
-* **PostgreSQL:** מסד ראשי למשתמשים רשומים, פרופילים, Elo וסשנים עמידים. תומך באינדקסים, שאילתות יחסים ו-ACID; ניתן להרחבה עם replicas וחלוקה (sharding) לפי `user_id` אם נדרש.
-* **Redis:** שכבת זיכרון מהירה לסשנים חמים, נוכחות מחוברים, תורי matchmaking, ומיפוי `room_id → game_host` / `user_id → gateway`.
-* **עקרון:** מצב הלוח בזמן משחק **לא** נכתב ל-PostgreSQL בכל מהלך — רק תוצאות / Elo בסוף משחק (ראו סעיף 4).
+### מיפוי לקוד הנוכחי (מונולית שעובד)
 
----
+כיום רוב התפקידים רצים בתהליך שרת אחד (`Server/`), עם חלוקה לוגית בתוך הקוד:
 
-## 2. ארכיטקטורת עומס גבוה (10M משתמשים בו-זמנית)
+| רכיב ב-Design | מימוש נוכחי (בקירוב) |
+|---------------|----------------------|
+| API + WS Gateway | `transport/` + `application/auth_service`, `lobby_service`, `session_service` |
+| Matchmaker | `application/matchmaking_service.py` |
+| Game Allocator | עדיין מקומי (חדר → engine באותו תהליך) — יופרד בגרסת Compose / סקייל |
+| Game Server | `application/game_service.py` + `infrastructure/game/engine_adapter.py` (GameEngine) |
+| Persistence | SQLite (`users.db`) — יוחלף / יושלם ב-PostgreSQL בגרסת Compose |
 
-### האם שרת אחד מספיק?
-**לא.** שרת יחיד הוא נקודת כשל אחת (SPOF), ומוגבל במספר חיבורי WebSocket, ב-CPU של לולאת המשחק, וברוחב פס. ל-10 מיליון שחקנים בו-זמנית נדרשים אשכולות מרובים של שרתי אפליקציה מאחורי Load Balancer.
-
-### ניהול מצב וסשן מבוזר (State & Session Management)
-* **Redis Cluster:** שומר סטייט אקטיבי בזמן אמת — מצב חיבור, מיפוי חדרים פעילים (`room_id → game_host`), והפניה ל-Gateway שבו יושב השחקן.
-* **שירותי Matchmaking ו-API גלובליים:** מפרידים בין אימות / תור לבין הרצת המשחק; מקצים שחקנים ל-Game host לפי עומס או hash על `room_id`.
-
-### איך כולם יכולים לשחק עם כולם / להיכנס לכל Room?
-אין צורך ששני השחקנים יהיו על אותו שרת פיזי:
-1. Matchmaking (או `room_create`) יוצר `room_id` ורושם ב-Redis איזה **Game host** מחזיק את החדר.
-2. כל לקוח מתחבר ל-**Gateway** (WebSocket). ה-Gateway מאמת token ומבצע lookup ב-Redis.
-3. הודעות `move` / `room_join` מנותבות ל-Game host שרשום עבור אותו `room_id` (proxy / RPC פנימי).
-4. כך שני שחקנים מאזורים או Gateways שונים נפגשים באותו חדר, וכל משתמש יכול להצטרף לכל `room_id` קיים כל עוד יש לו הרשאה.
-
-### תקשורת בין שירותים
-* **נתיב חם (מהלכים בזמן אמת):** Redis Pub/Sub או gRPC בין Gateway ל-Game host.
-* **נתיב קר (סיום משחק, Elo, אנליטיקה):** תור הודעות (למשל RabbitMQ / Kafka) → Persistence Workers → PostgreSQL.
-  אין להעביר כל מהלך דרך Kafka — זה מוסיף latency מיותר לנתיב המשחק.
-
-### חלוקת תפקידים בשיטת Microservices
-1. **Gateway (WebSocket edge):** מחזיק את חיבורי הלקוח, מאמת session, ומנתב הודעות לשירות הנכון. Stateless יחסית; ניתן לשכפל אופקית.
-2. **Auth & Profile:** הרשמות, התחברויות, טוקנים ו-Elo בסיסי מול PostgreSQL.
-3. **Matchmaker:** משדך שחקנים לפי רמה / המתנה, יוצר חדרים ומעדכן את ה-directory ב-Redis.
-4. **Game Hosts (ארוכי חיים):** שרתים יציבים שמנהלים חדרים רבים ב-RAM (לוח, חוקים, tick). **לא** תהליך / מופע חדש לכל משחק.
-5. **Data Persistence Workers:** מעבדים תוצאות משחק מהתור באופן אסינכרוני ומעדכנים את PostgreSQL.
+המונולית נשאר נקודת התחלה תקינה; ה-Design מגדיר לאן מפרקים כשעוברים לסקייל.
 
 ---
 
-## 3. ניתוח תעבורת רשת ורוחב פס (Network Bandwidth)
+## 2. דיאגרמת אחריות (Logical)
 
-### פרמטרי עבודה
-* **משתמשים פעילים בו-זמנית:** 10,000,000 (~5,000,000 משחקים)
-* **תדירות פעולה:** בממוצע מהלך כל ~2 שניות לכל שחקן פעיל → כ-$0.5$ מהלכים/שנייה למשתמש
-* **גודל הודעה (סדר גודל):** מהלך / ACK קטנים (מאות בתים ב-JSON); הודעות `state` (snapshot לוח) גדולות יותר
-
-### חישובי רוחב פס (סדר גודל)
-* **נפח מהלכים נכנסים:** $10{,}000{,}000 \times 0.5 = 5{,}000{,}000$ messages/second
-* אם מניחים ~200 Bytes להודעת מהלך בלבד:  
-  $5{,}000{,}000 \times 200 \approx 1$ GB/s $\approx$ **8 Gbps** רק בכיוון הלקוח→שרת
-* בפועל יש גם **ACK / STATE** ו-**fan-out** לפחות לשני שחקנים בחדר → התעבורה היוצאת מהשרתים גדולה משמעותית (לעיתים פי 2 ומעלה), ותלויה בגודל ה-`state`
-
-### האם זה הרבה או מעט?
-* **למשתמש בודד:** כ־0.5–2 KB/s — מעט מאוד לאינטרנט ביתי.
-* **למערכת כולה:** סדר גודל של Gbps רבים ברשת ה-datacenter — הרבה עבור NIC / שרת בודד.
-* לכן התעבורה מפוזרת בין אזורי ענן, Load Balancers ו-Game hosts רבים — לא דרך כרטיס רשת אחד.
+```text
+                    ┌─────────────────┐
+                    │     Client      │
+                    │ (גרפיקה / WS)   │
+                    └────────┬────────┘
+              HTTP/REST      │      WebSocket
+                             │
+         ┌───────────────────┴───────────────────┐
+         ▼                                       ▼
+┌─────────────────┐                   ┌─────────────────────┐
+│  API Gateway    │                   │ WebSocket Gateway   │
+│ login, rooms,   │                   │ חיבורים חיים,       │
+│ history         │                   │ ניתוב + state push  │
+└────────┬────────┘                   └──────────┬──────────┘
+         │                                       │
+         │              ┌────────────────────────┤
+         │              │                        │
+         ▼              ▼                        ▼
+┌──────────────┐  ┌─────────────┐      ┌──────────────────┐
+│ PostgreSQL   │  │ Matchmaker  │      │ Game Allocator   │
+│ users, games │  │ שידוך Elo   │─────▶│ room → shard     │
+│ results      │  └─────────────┘      └────────┬─────────┘
+└──────────────┘                                │
+                                                ▼
+                                     ┌──────────────────────┐
+                                     │ Game Server Shards   │
+                                     │ GameEngine (truth)   │
+                                     └──────────┬───────────┘
+                                                │
+                     Redis (sessions, queue,    │  NATS / Redis PubSub
+                     room→shard, reconnect) ◀───┴──▶ fan-out ל-WS Gateway
+```
 
 ---
 
-## 4. משמעות מחזור חיים קצר של משחק (30–90 שניות)
+## 3. טכנולוגיות מומלצות
 
-* **חדרים זמניים על hosts יציבים:** תחלופת משחקים גבוהה מטופלת ע"י יצירה/מחיקה מהירה של **rooms בזיכרון** בתוך Game hosts ארוכי חיים — לא ע"י הרמת מופע שרת חדש לכל משחק (זה איטי ויקר מדי בקנה מידה זה).
-* **הרצה בזיכרון בלבד (In-Memory Execution):** מצב המשחק נשמר ב-RAM של ה-Game host במהלך המשחק, כדי למנוע צוואר בקבוק של I/O לדיסק.
-* **עדכון נתונים אסינכרוני:** בסיום המשחק נשלחת תוצאה לתור הודעות; Persistence Workers מעדכנים Elo ב-PostgreSQL בנפרד מנתיב המהלכים.
-* **Cleanup חובה:** אחרי `game_over` משחררים engine/room מהזיכרון ומעדכנים את ה-directory ב-Redis — אחרת דליפת זיכרון תהרוג את ה-hosts תוך דקות בעומס גבוה.
+| טכנולוגיה | שימוש |
+|-----------|--------|
+| **NATS / Redis PubSub** | תקשורת פנימית בין Gateway ↔ Matchmaker ↔ Allocator ↔ Game Shards (נתיב חם) |
+| **Redis** | מידע זמני: sessions, active rooms, reconnect, תור matchmaking, מיפוי `room_id → shard` |
+| **PostgreSQL** | מידע קבוע: users, games, results, move history (אחרי סיום / נתיב קר) |
+| **Docker Compose** | הרצת גרסה קטנה מקומית של המערכת |
+| **Kubernetes / K3s** | הרצה מנוהלת ו-scale של containers בסביבת ייצור / מעבדה מתקדמת |
+
+### למה לא SQLite בסקייל?
+
+SQLite נועל קובץ יחיד לכתיבות. תחת עומס מקבילי גבוה (הרשמה, סשנים, Elo) זה הופך לצוואר בקבוק. בלימוד אפשר להשאיר SQLite במונולית; ב-Compose/סקייל — PostgreSQL.
+
+### נתיב חם מול נתיב קר
+
+* **חם:** מהלכים / ack / state — דרך PubSub או RPC קצר, **בלי** לכתוב כל מהלך ל-PostgreSQL.
+* **קר:** `game_over`, עדכון Elo, היסטוריה — אסינכרוני ל-PostgreSQL (תור / worker).
+
+---
+
+## 4. זרימות עיקריות
+
+### 4.1 Login
+
+1. Client → **API Gateway** (`login`)
+2. אימות / יצירת משתמש מול **PostgreSQL**
+3. יצירת session ב-**Redis** + token ללקוח
+4. Client מתחבר ל-**WebSocket Gateway** עם token
+
+### 4.2 Matchmaking
+
+1. Client שולח `play` דרך WS Gateway
+2. **Matchmaker** מכניס לתור ב-Redis (חלון Elo)
+3. כשנמצא זוג → נוצר `room_id`
+4. **Game Allocator** בוחר shard ורושם `room_id → shard` ב-Redis
+5. שני הלקוחות מקבלים `match_found` (+ צבע) דרך WS Gateway
+6. ה-shard יוצר GameEngine ל-room
+
+### 4.3 מהלך במשחק
+
+1. Client שולח `move` ל-WS Gateway
+2. Gateway מאתר את ה-shard לפי Redis ומעביר את הבקשה
+3. **GameEngine** בודק חוקיות ומעדכן מצב ב-RAM
+4. `ack` / בהמשך `state` חוזרים ללקוחות בחדר דרך WS Gateway
+5. **לא** נשמר snapshot מלא ל-DB בכל מהלך
+
+### 4.4 סיום משחק
+
+1. GameEngine קובע `game_over` + מנצח
+2. פרסום תוצאה לנתיב קר → עדכון Elo / היסטוריה ב-PostgreSQL
+3. Cleanup: שחרור room מה-shard + מחיקת מיפוי ב-Redis
+
+### 4.5 Reconnect
+
+* Session / `room_id` ב-Redis מאפשרים חזרה תוך חלון חסד
+* WS Gateway מאמת token ומשייך מחדש לחדר הפעיל ב-shard
+
+---
+
+## 5. Game Allocator — למה רכיב נפרד?
+
+בלי Allocator, Matchmaker או Gateway עלולים "להדביק" rooms לשרת קבוע ולהפוך ל-SPOF או לעומס לא מאוזן.
+
+ה-Allocator:
+
+* בוחר shard פחות עמוס / לפי hash על `room_id`
+* מעדכן directory ב-Redis
+* מאפשר להוסיף shards בלי לשנות את הלקוח
+
+בגרסת Compose קטנה: Allocator יכול להיות פונקציה פשוטה (או שירות מינימלי) שבוחר בין `game-server-1` ל-`game-server-2`.
+
+---
+
+## 6. Observability
+
+| סוג | דוגמאות |
+|-----|---------|
+| **Logs** | login, match_found, move rejected, game_over, disconnect grace (כבר קיים בסיס ב-`Server/logs`) |
+| **Metrics** | חיבורי WS פעילים, אורך תור matchmaking, rooms לכל shard, latency של move→ack |
+| **Health** | `/health` לכל שירות ב-Compose (process up + תלות Redis/Postgres) |
+| **Load tests** | סימולציית לקוחות (login + play + moves) מול Compose לפני K8s |
+
+בלי observability קשה לדעת אם פיצול השירותים באמת מחזיק עומס.
+
+---
+
+## 7. גרסה קטנה שעובדת (Docker Compose) — יעד המימוש הבא
+
+עקרון: **עדיף משהו קטן שעובד** מאשר לבנות את כל הסקייל ולא לסיים.
+
+### הרכב מוצע ל-Compose
+
+```text
+services:
+  postgres
+  redis
+  api-gateway          # login / rooms / history (HTTP)
+  ws-gateway           # WebSocket ללקוח
+  matchmaker
+  game-allocator       # יכול להיות חלק קטן / שירות דק
+  game-server-1        # shard עם GameEngine
+  # game-server-2      # אופציונלי להדגמת הקצאה
+```
+
+תקשורת פנימית ראשונית: **Redis PubSub** (פשוט יותר מ-NATS ללימוד).  
+K8s / K3s — רק אחרי ש-`docker compose up` מאפשר לשני קליינטים להתחבר ולשחק end-to-end.
+
+### שלבי מימוש מומלצים
+
+1. ~~שרת בסיסי עובד + קליינט גרפי~~ (קיים)
+2. עדכון Design זה (מסמך נוכחי)
+3. Docker Compose מינימלי (אריזת השרת + Redis/Postgres)
+4. פיצול הדרגתי ל-WS Gateway / Matchmaker / Game Shard לפי הצורך
+
+---
+
+## 8. שיקולי סקייל (ייצור מלא)
+
+### האם שרת אחד מספיק ל-10M בו-זמנית?
+
+**לא.** שרת יחיד הוא SPOF ומוגבל בחיבורי WebSocket, CPU של tick, ורוחב פס. נדרשים Gateways ו-Shards רבים מאחורי load balancing.
+
+### איך כולם משחקים עם כולם?
+
+אין חובה ששני השחקנים יהיו על אותו תהליך פיזי:
+
+1. Matchmaker יוצר `room_id`
+2. Allocator רושם ב-Redis איזה shard מחזיק את החדר
+3. כל Client מתחבר ל-WS Gateway (יכול להיות Gateway אחר)
+4. הודעות `move` מנותבות ל-shard הרשום
+
+### הערכת תעבורה (סדר גודל)
+
+* ~10M פעילים, ~0.5 מהלכים/שנייה למשתמש → ~5M הודעות מהלך/שנייה נכנסות
+* ~200B למהלך → סדר גודל של Gbps ברמת datacenter (לא פר משתמש ביתי)
+* לכן מפזרים על Gateways ו-Shards רבים — לא NIC אחד
+
+### מחזור חיים קצר של משחק (עשרות שניות–דקות)
+
+* Rooms זמניים על **shards ארוכי חיים** (לא container חדש לכל משחק)
+* מצב משחק ב-RAM בלבד בזמן המשחק
+* Persist רק בסוף (Elo / תוצאה)
+* Cleanup חובה אחרי `game_over` כדי למנוע דליפת זיכרון
+
+---
+
+## 9. החלטות שאנחנו עומדות מאחוריהן
+
+1. **GameEngine הוא מקור האמת** — Client ו-Gateway הם transport / UX בלבד.
+2. **הפרדת API (לא real-time) מ-WebSocket (real-time)** — מקלה על scale ועל אבטחת session.
+3. **Matchmaker נפרד מ-Game Shard** — שידוך לא חוסם tick של משחקים.
+4. **Allocator מפורש** — כדי לא לקבע rooms לשרת אחד כשמוסיפים shards.
+5. **Redis לזמני, PostgreSQL לקבוע** — בלי לכתוב כל מהלך ל-DB.
+6. **Compose קודם, K8s אחר כך** — גרסה קטנה שעובדת לפני תשתית מלאה.
+
+---
+
+## 10. סיכום
+
+| שכבה | מצב |
+|------|-----|
+| שרת בסיסי + פרוטוקול + גרפיקה | קיים ועובד |
+| Design לפי רכיבי הסקיילביליות | מסמך זה |
+| Docker Compose קטן | הצעד הבא למימוש |
+| פיצול מלא + K8s | שלב מתקדם אחרי Compose יציב |
