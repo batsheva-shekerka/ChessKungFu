@@ -112,6 +112,12 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
 
     async def notify_user(user_id: str, payload: dict) -> None:
         await registry.send_to_user(user_id, encode(payload))
+        if payload.get("type") == "match_found":
+            room_id = payload.get("room_id")
+            if room_id and games.get_engine(room_id) is not None:
+                await registry.send_to_user(
+                    user_id, encode(games.build_state_dict(room_id))
+                )
 
     matchmaking = MatchmakingService(
         logger=logger,

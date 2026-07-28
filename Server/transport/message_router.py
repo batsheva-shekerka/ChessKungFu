@@ -232,3 +232,21 @@ class MessageRouter:
                 outcome.broadcast_user_ids,
                 encode(outcome.broadcast_payload),
             )
+
+        # Push current board when entering a room so graphics clients sync.
+        payload = outcome.payload
+        if isinstance(payload, dict):
+            msg_type = payload.get("type")
+            room_id = payload.get("room_id")
+            if (
+                room_id
+                and msg_type
+                in (
+                    MessageType.ROOM_CREATED.value,
+                    MessageType.ROOM_JOINED.value,
+                )
+                and self._games.get_engine(room_id) is not None
+            ):
+                await ctx.websocket.send(
+                    encode(self._games.build_state_dict(room_id))
+                )
