@@ -6,11 +6,30 @@
 #   matchmaker      — Redis queue matching + Game Allocator
 #   redis / postgres
 #
+# Health / metrics (host):
+#   gateway       http://localhost:18080/health | /metrics
+#   matchmaker    http://localhost:18081/health | /metrics
+#   game-server-1 http://localhost:18082/health | /metrics
+#   game-server-2 http://localhost:18083/health | /metrics
+#
 # Usage:
 #   docker compose up --build
 #   docker compose down
 #
 # Clients connect to: ws://localhost:8765
+
+x-app-healthcheck: &app_healthcheck
+  test:
+    [
+      "CMD",
+      "python",
+      "-c",
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)",
+    ]
+  interval: 10s
+  timeout: 3s
+  retries: 5
+  start_period: 10s
 
 services:
   redis:
@@ -50,13 +69,17 @@ services:
     environment:
       SERVICE_ROLE: game
       SHARD_ID: game-server-1
+      HEALTH_PORT: "8080"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    ports:
+      - "18082:8080"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    healthcheck: *app_healthcheck
     restart: unless-stopped
 
   game-server-2:
@@ -65,8 +88,11 @@ services:
     environment:
       SERVICE_ROLE: game
       SHARD_ID: game-server-2
+      HEALTH_PORT: "8080"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    ports:
+      - "18083:8080"
     depends_on:
       redis:
         condition: service_healthy
@@ -74,6 +100,7 @@ services:
         condition: service_healthy
       game-server-1:
         condition: service_started
+    healthcheck: *app_healthcheck
     restart: unless-stopped
 
   ws-gateway:
@@ -83,20 +110,23 @@ services:
       SERVICE_ROLE: gateway
       HOST: "0.0.0.0"
       PORT: "8765"
+      HEALTH_PORT: "8080"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
       GAME_SHARDS: "game-server-1,game-server-2"
     ports:
       - "8765:8765"
+      - "18080:8080"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
       game-server-1:
-        condition: service_started
+        condition: service_healthy
       game-server-2:
-        condition: service_started
+        condition: service_healthy
+    healthcheck: *app_healthcheck
     restart: unless-stopped
 
   matchmaker:
@@ -104,18 +134,22 @@ services:
     command: ["python", "-u", "matchmaker_main.py"]
     environment:
       SERVICE_ROLE: matchmaker
+      HEALTH_PORT: "8080"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
       GAME_SHARDS: "game-server-1,game-server-2"
+    ports:
+      - "18081:8080"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
       game-server-1:
-        condition: service_started
+        condition: service_healthy
       game-server-2:
-        condition: service_started
+        condition: service_healthy
+    healthcheck: *app_healthcheck
     restart: unless-stopped
 
 volumes:

@@ -38,6 +38,9 @@ class RedisMatchmakingQueue:
     def is_queued(self, user_id: str) -> bool:
         return self._r.zscore(QUEUE_KEY, user_id) is not None
 
+    def length(self) -> int:
+        return int(self._r.zcard(QUEUE_KEY))
+
     def snapshot(self) -> list[QueueEntry]:
         rows = self._r.zrange(QUEUE_KEY, 0, -1, withscores=True)
         if not rows:

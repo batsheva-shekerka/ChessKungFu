@@ -25,6 +25,9 @@ class RoomService:
     def get_room(self, room_id: str) -> Optional[Room]:
         return self._rooms.get(room_id)
 
+    def active_room_count(self) -> int:
+        return len(self._rooms)
+
     def room_id_for_user(self, user_id: str) -> Optional[str]:
         return self._user_room.get(user_id)
 

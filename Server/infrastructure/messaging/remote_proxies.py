@@ -65,18 +65,26 @@ class RemoteLobbyProxy:
 
 
 class RemoteGameProxy:
-    def __init__(self, bus: GameCommandBus, allocator: GameAllocator):
+    def __init__(
+        self,
+        bus: GameCommandBus,
+        allocator: GameAllocator,
+        move_latency: Any | None = None,
+    ):
         self._bus = bus
         self._allocator = allocator
+        self._move_latency = move_latency
 
     async def submit_move(
         self, user_id: str, start: tuple[int, int], end: tuple[int, int]
     ) -> MoveOutcome:
         import asyncio
+        import time
 
         shard = self._allocator.shard_for_user(user_id)
         if not shard:
             return MoveOutcome(ok=False, reason="not in a game on any shard")
+        t0 = time.perf_counter()
         reply = await asyncio.to_thread(
             self._bus.call,
             {
@@ -88,6 +96,8 @@ class RemoteGameProxy:
             5.0,
             shard_id=shard,
         )
+        if self._move_latency is not None:
+            self._move_latency.record((time.perf_counter() - t0) * 1000.0)
         if not reply.get("ok"):
             return MoveOutcome(ok=False, reason=str(reply.get("error", "move failed")))
         return MoveOutcome(

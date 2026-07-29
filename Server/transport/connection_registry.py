@@ -55,6 +55,12 @@ class ConnectionRegistry:
     def get_by_user(self, user_id: str) -> Optional[ConnectionContext]:
         return self._by_user.get(user_id)
 
+    def connection_count(self) -> int:
+        return len(self._by_ws)
+
+    def authenticated_count(self) -> int:
+        return len(self._by_user)
+
     async def send_to_user(self, user_id: str, message: str) -> None:
         ctx = self._by_user.get(user_id)
         if ctx is None:

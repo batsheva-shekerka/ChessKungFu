@@ -29,6 +29,11 @@ from infrastructure.game.engine_adapter import KungFuEngineFactory
 from infrastructure.matchmaking.allocator import GameAllocator
 from infrastructure.matchmaking.redis_queue import EVENTS_CHANNEL, RedisMatchmakingQueue
 from infrastructure.messaging.game_bus import GameCommandBus
+from infrastructure.observability import (
+    check_postgres,
+    check_redis,
+    start_observability_server,
+)
 from protocol import (
     MatchFoundMessage,
     encode,
@@ -330,6 +335,8 @@ async def _cmd_loop(
 async def main() -> None:
     logger = create_server_logger(SERVER_ROOT)
     redis_url = os.environ.get("REDIS_URL", "").strip()
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    health_port = int(os.environ.get("HEALTH_PORT", "8080"))
     if not redis_url:
         raise SystemExit("REDIS_URL is required for game-server")
 
@@ -338,6 +345,25 @@ async def main() -> None:
     allocator = GameAllocator(redis_url, shard_ids=[shard_id])
     rooms, games, lobby, runtime, _broadcast_users = _build_game_stack(logger, bus)
     logger.info("Game server started", shard_id=shard_id)
+
+    def snapshot() -> dict:
+        redis_ok = check_redis(redis_url)
+        pg_ok = check_postgres(database_url)
+        ok = bool(redis_ok.get("ok")) and bool(pg_ok.get("ok"))
+        return {
+            "ok": ok,
+            "checks": {"redis": redis_ok, "postgres": pg_ok},
+            "shard_id": shard_id,
+            "rooms": rooms.active_room_count(),
+        }
+
+    start_observability_server(
+        host="0.0.0.0",
+        port=health_port,
+        service=shard_id,
+        snapshot=snapshot,
+        logger=logger,
+    )
 
     asyncio.create_task(runtime.run())
 

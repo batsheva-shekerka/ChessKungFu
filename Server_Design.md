@@ -160,9 +160,11 @@ SQLite נועל קובץ יחיד לכתיבות. תחת עומס מקבילי �
 | סוג | דוגמאות |
 |-----|---------|
 | **Logs** | login, match_found, move rejected, game_over, disconnect grace (כבר קיים בסיס ב-`Server/logs`) |
-| **Metrics** | חיבורי WS פעילים, אורך תור matchmaking, rooms לכל shard, latency של move→ack |
-| **Health** | `/health` לכל שירות ב-Compose (process up + תלות Redis/Postgres) |
+| **Metrics** | `/metrics` לכל שירות: חיבורי WS, אורך תור matchmaking, rooms לכל shard, latency של move→ack |
+| **Health** | `/health` לכל שירות (process + Redis/Postgres); גם Docker `healthcheck` ב-Compose |
 | **Load tests** | סימולציית לקוחות (login + play + moves) מול Compose לפני K8s |
+
+פורטים מקומיים (Compose): gateway `18080`, matchmaker `18081`, game-server-1 `18082`, game-server-2 `18083`.
 
 בלי observability קשה לדעת אם פיצול השירותים באמת מחזיק עומס.
 

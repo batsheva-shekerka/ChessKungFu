@@ -65,6 +65,14 @@ docker compose up --build
 - **Redis** על פורט `6379`
 - **Postgres** על פורט `5432`
 
+Health / metrics (בדפדפן או `curl`):
+- Gateway: http://localhost:18080/health · http://localhost:18080/metrics
+- Matchmaker: http://localhost:18081/health · http://localhost:18081/metrics
+- Game-1: http://localhost:18082/health · http://localhost:18082/metrics
+- Game-2: http://localhost:18083/health · http://localhost:18083/metrics
+
+ב-`/metrics` תראו למשל חיבורי WS, אורך תור matchmaking, rooms לכל shard, ו-latency של move→ack.
+
 עצירה:
 
 ```bash
