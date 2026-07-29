@@ -8,12 +8,13 @@ from application.ports import (
     EventPublisher,
     GameEngineFactory,
     GameEnginePort,
+    GameHistoryStore,
     UserStore,
 )
 from application.room_service import RoomService
 from domain.elo import calc_elo
 from domain.events import EventType
-from domain.models import PlayerRole
+from domain.models import GameResult, PlayerRole
 
 
 BroadcastFn = Callable[[str, str], Any]  # room_id, encoded_message
@@ -35,6 +36,7 @@ class GameService:
         is_elo_updated: Callable[[str], bool],
         mark_elo_updated: Callable[[str], None],
         broadcast_room: BroadcastFn,
+        game_history: GameHistoryStore | None = None,
     ):
         self._users = users
         self._bus = bus
@@ -46,6 +48,7 @@ class GameService:
         self._is_elo_updated = is_elo_updated
         self._mark_elo_updated = mark_elo_updated
         self._broadcast_room = broadcast_room
+        self._game_history = game_history
 
     def create_engine_for_room(self, room_id: str) -> GameEnginePort:
         engine = self._engine_factory.create()
@@ -174,9 +177,36 @@ class GameService:
         else:
             new_black, new_white = calc_elo(black_user.elo, white_user.elo)
 
+        white_before, black_before = white_user.elo, black_user.elo
         self._users.set_elo(white_id, new_white)
         self._users.set_elo(black_id, new_black)
         self._mark_elo_updated(room_id)
+
+        if self._game_history is not None:
+            try:
+                self._game_history.record(
+                    GameResult(
+                        room_id=room_id,
+                        white_id=white_id,
+                        black_id=black_id,
+                        winner=str(engine.winner),
+                        white_elo_before=white_before,
+                        black_elo_before=black_before,
+                        white_elo_after=new_white,
+                        black_elo_after=new_black,
+                    )
+                )
+                self._logger.info(
+                    "Game result persisted (cold path)",
+                    room_id=room_id,
+                    winner=engine.winner,
+                )
+            except Exception as exc:
+                self._logger.error(
+                    "Failed to persist game result",
+                    exc=exc,
+                    room_id=room_id,
+                )
 
         ratings = {white_name: new_white, black_name: new_black}
         payload = make_game_over_fn(engine.winner, ratings, room_id=room_id)

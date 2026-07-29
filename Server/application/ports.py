@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Protocol
 
-from domain.models import Session, User
+from domain.models import GameResult, Session, User
 
 
 class AppLogger(Protocol):
@@ -36,6 +36,16 @@ class UserStore(Protocol):
     def get_by_username(self, username: str) -> Optional[User]: ...
 
     def set_elo(self, user_id: str, elo: int) -> None: ...
+
+
+class GameHistoryStore(Protocol):
+    """Cold-path persistence for finished games (results + Elo delta)."""
+
+    def record(self, result: GameResult) -> None: ...
+
+    def count(self) -> int: ...
+
+    def list_recent(self, limit: int = 20) -> list[GameResult]: ...
 
 
 class SessionStore(Protocol):

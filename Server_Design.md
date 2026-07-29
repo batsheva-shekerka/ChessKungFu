@@ -38,7 +38,7 @@
 | Matchmaker | `matchmaker` service + Redis queue (`infrastructure/matchmaking/`) |
 | Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` + `user → room` ב-Redis) |
 | Game Server | `game-server-1` / `game-server-2` (`game_main.py`) — shards עם תור פקודות נפרד לכל אחד |
-| Persistence | PostgreSQL למשתמשים + Redis לסשנים/תור (SQLite כ-fallback מקומי) |
+| Persistence | PostgreSQL למשתמשים + Elo + טבלת `games` (היסטוריה אחרי game_over); Redis לסשנים/תור |
 
 המונולית נשאר נקודת התחלה תקינה; ה-Design מגדיר לאן מפרקים כשעוברים לסקייל.
 

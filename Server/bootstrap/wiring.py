@@ -27,6 +27,8 @@ from infrastructure.db.session_repository import SessionRepository
 from infrastructure.db.redis_session_repository import RedisSessionRepository
 from infrastructure.db.user_repository import UserRepository
 from infrastructure.db.postgres_user_repository import PostgresUserRepository
+from infrastructure.db.postgres_game_repository import PostgresGameRepository
+from infrastructure.db.sqlite_game_repository import SqliteGameRepository
 from infrastructure.game.board_loader import InputTxtBoardLoader
 from infrastructure.game.engine_adapter import KungFuEngineFactory
 from infrastructure.matchmaking.gateway_client import RedisMatchmakingGateway
@@ -47,6 +49,7 @@ class AppContainer:
     games: Any = None
     registry: Any = None
     use_remote_matchmaker: bool = False
+    game_history: Any = None
 
 
 def _build_session_store(db_path: str, logger: Any):
@@ -87,6 +90,25 @@ def _build_user_store(db_path: str, logger: Any):
         return UserRepository(db_path)
 
 
+def _build_game_history_store(db_path: str, logger: Any):
+    """Cold-path game results: PostgreSQL when DATABASE_URL set, else SQLite."""
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        logger.info("Game history: SQLite", path=db_path)
+        return SqliteGameRepository(db_path)
+    try:
+        store = PostgresGameRepository(database_url)
+        safe = database_url.split("@")[-1] if "@" in database_url else database_url
+        logger.info("Game history: PostgreSQL", host=safe)
+        return store
+    except Exception as exc:
+        logger.error(
+            "PostgreSQL game history unavailable; falling back to SQLite",
+            exc=exc,
+        )
+        return SqliteGameRepository(db_path)
+
+
 def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     logger = create_server_logger(SERVER_ROOT)
     db_path = os.path.join(SERVER_ROOT, "users.db")
@@ -96,6 +118,7 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     use_remote_mm = role in ("gateway", "ws-gateway") and bool(redis_url)
 
     users = _build_user_store(db_path, logger)
+    game_history = _build_game_history_store(db_path, logger)
     sessions = _build_session_store(db_path, logger)
     registry = ConnectionRegistry(logger=logger)
 
@@ -152,6 +175,7 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
         is_elo_updated=rooms.is_elo_updated,
         mark_elo_updated=rooms.mark_elo_updated,
         broadcast_room=broadcast_room,
+        game_history=game_history,
     )
     games_holder["games"] = games
 
@@ -224,4 +248,5 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
         games=games,
         registry=registry,
         use_remote_matchmaker=use_remote_mm,
+        game_history=game_history,
     )

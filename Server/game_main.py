@@ -20,7 +20,7 @@ from application.lobby_service import LobbyService
 from application.room_service import RoomService
 from application.server_runtime import ServerRuntime
 from bootstrap.logging_setup import create_server_logger
-from bootstrap.wiring import _build_user_store
+from bootstrap.wiring import _build_game_history_store, _build_user_store
 from domain.events import EventType
 from domain.models import PlayerRole
 from infrastructure.async_event_bus import AsyncEventBus
@@ -56,6 +56,7 @@ class _NoopMatchmaking:
 def _build_game_stack(logger, bus: GameCommandBus):
     db_path = os.path.join(SERVER_ROOT, "users.db")
     users = _build_user_store(db_path, logger)
+    game_history = _build_game_history_store(db_path, logger)
 
     def on_bus_error(event_type: str, exc: BaseException) -> None:
         logger.error(f"Event listener failed for {event_type}", exc=exc)
@@ -114,6 +115,7 @@ def _build_game_stack(logger, bus: GameCommandBus):
         is_elo_updated=rooms.is_elo_updated,
         mark_elo_updated=rooms.mark_elo_updated,
         broadcast_room=broadcast_room,
+        game_history=game_history,
     )
     games_holder["games"] = games
 
@@ -128,7 +130,7 @@ def _build_game_stack(logger, bus: GameCommandBus):
         make_game_over_fn=make_game_over,
         make_disconnect_countdown_fn=make_disconnect_countdown,
     )
-    return rooms, games, lobby, runtime, broadcast_users
+    return rooms, games, lobby, runtime, broadcast_users, game_history
 
 
 def _handle_command(
@@ -343,18 +345,26 @@ async def main() -> None:
     shard_id = os.environ.get("SHARD_ID", "game-server-1").strip()
     bus = GameCommandBus(redis_url)
     allocator = GameAllocator(redis_url, shard_ids=[shard_id])
-    rooms, games, lobby, runtime, _broadcast_users = _build_game_stack(logger, bus)
+    rooms, games, lobby, runtime, _broadcast_users, game_history = _build_game_stack(
+        logger, bus
+    )
     logger.info("Game server started", shard_id=shard_id)
 
     def snapshot() -> dict:
         redis_ok = check_redis(redis_url)
         pg_ok = check_postgres(database_url)
         ok = bool(redis_ok.get("ok")) and bool(pg_ok.get("ok"))
+        games_count = 0
+        try:
+            games_count = game_history.count()
+        except Exception:
+            games_count = -1
         return {
             "ok": ok,
             "checks": {"redis": redis_ok, "postgres": pg_ok},
             "shard_id": shard_id,
             "rooms": rooms.active_room_count(),
+            "games_recorded": games_count,
         }
 
     start_observability_server(

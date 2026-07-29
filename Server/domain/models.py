@@ -24,6 +24,19 @@ class User:
 
 
 @dataclass
+class GameResult:
+    room_id: str
+    white_id: str
+    black_id: str
+    winner: str
+    white_elo_before: int
+    black_elo_before: int
+    white_elo_after: int
+    black_elo_after: int
+    ended_at: float | None = None
+
+
+@dataclass
 class Session:
     token: str
     user_id: str
