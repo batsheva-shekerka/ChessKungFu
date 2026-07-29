@@ -1,13 +1,15 @@
-# KungFu Chess — small working stack (Docker Compose)
+# KungFu Chess — split stack (Docker Compose)
 #
-# Usage (from repo root, with Docker Desktop running):
+# Services:
+#   ws-gateway  — WebSocket edge + auth + game engine (client port 8765)
+#   matchmaker  — Redis queue matching + Game Allocator
+#   redis / postgres
+#
+# Usage:
 #   docker compose up --build
 #   docker compose down
 #
-# Game clients connect to: ws://localhost:8765
-#
-# Note: game-server uses Redis for sessions (REDIS_URL) and
-# PostgreSQL for users/Elo (DATABASE_URL). SQLite remains the local fallback.
+# Clients connect to: ws://localhost:8765
 
 services:
   redis:
@@ -38,17 +40,18 @@ services:
       retries: 10
     restart: unless-stopped
 
-  game-server:
+  ws-gateway:
     build:
       context: .
       dockerfile: Dockerfile
     image: kungfu-chess-server:local
     environment:
+      SERVICE_ROLE: gateway
       HOST: "0.0.0.0"
       PORT: "8765"
-      # Reserved for future wiring (see Server_Design.md):
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+      GAME_SHARDS: "ws-gateway"
     ports:
       - "8765:8765"
     depends_on:
@@ -56,6 +59,23 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  matchmaker:
+    image: kungfu-chess-server:local
+    command: ["python", "-u", "matchmaker_main.py"]
+    environment:
+      SERVICE_ROLE: matchmaker
+      REDIS_URL: "redis://redis:6379/0"
+      DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+      GAME_SHARDS: "ws-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      ws-gateway:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

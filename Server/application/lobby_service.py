@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from application.dto import CommandOutcome
-from application.matchmaking_service import MatchmakingService
 from application.ports import AppLogger
 from application.room_service import RoomService
 from domain.models import PlayerRole
@@ -20,7 +19,7 @@ class LobbyService:
     def __init__(
         self,
         rooms: RoomService,
-        matchmaking: MatchmakingService,
+        matchmaking,  # MatchmakingService | RedisMatchmakingGateway
         logger: AppLogger,
     ):
         self._rooms = rooms

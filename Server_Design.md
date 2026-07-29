@@ -34,11 +34,11 @@
 
 | רכיב ב-Design | מימוש נוכחי (בקירוב) |
 |---------------|----------------------|
-| API + WS Gateway | `transport/` + `application/auth_service`, `lobby_service`, `session_service` |
-| Matchmaker | `application/matchmaking_service.py` |
-| Game Allocator | עדיין מקומי (חדר → engine באותו תהליך) — יופרד בגרסת Compose / סקייל |
-| Game Server | `application/game_service.py` + `infrastructure/game/engine_adapter.py` (GameEngine) |
-| Persistence | SQLite (`users.db`) — יוחלף / יושלם ב-PostgreSQL בגרסת Compose |
+| API + WS Gateway | `ws-gateway` service (`server.py` / `app.py`) |
+| Matchmaker | `matchmaker` service + Redis queue (`infrastructure/matchmaking/`) |
+| Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` ב-Redis) |
+| Game Server | כרגע בתוך `ws-gateway` (מנוע authoritative); מוכן לפיצול shard נוסף |
+| Persistence | PostgreSQL למשתמשים + Redis לסשנים/תור (SQLite כ-fallback מקומי) |
 
 המונולית נשאר נקודת התחלה תקינה; ה-Design מגדיר לאן מפרקים כשעוברים לסקייל.
 

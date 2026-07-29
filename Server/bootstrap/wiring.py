@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 SERVER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 PROJECT_ROOT = os.path.abspath(os.path.join(SERVER_ROOT, ".."))
@@ -29,6 +29,8 @@ from infrastructure.db.user_repository import UserRepository
 from infrastructure.db.postgres_user_repository import PostgresUserRepository
 from infrastructure.game.board_loader import InputTxtBoardLoader
 from infrastructure.game.engine_adapter import KungFuEngineFactory
+from infrastructure.matchmaking.gateway_client import RedisMatchmakingGateway
+from infrastructure.matchmaking.redis_queue import RedisMatchmakingQueue
 from protocol import encode, make_disconnect_countdown, make_game_over
 from transport.connection_registry import ConnectionRegistry
 from transport.message_router import MessageRouter
@@ -40,6 +42,11 @@ class AppContainer:
     server: WebSocketServerApp
     runtime: ServerRuntime
     logger: Any
+    redis_url: Optional[str] = None
+    rooms: Any = None
+    games: Any = None
+    registry: Any = None
+    use_remote_matchmaker: bool = False
 
 
 def _build_session_store(db_path: str, logger: Any):
@@ -69,7 +76,6 @@ def _build_user_store(db_path: str, logger: Any):
         return UserRepository(db_path)
     try:
         store = PostgresUserRepository(database_url)
-        # Avoid logging password in plain URL
         safe = database_url.split("@")[-1] if "@" in database_url else database_url
         logger.info("User store: PostgreSQL", host=safe)
         return store
@@ -84,12 +90,14 @@ def _build_user_store(db_path: str, logger: Any):
 def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     logger = create_server_logger(SERVER_ROOT)
     db_path = os.path.join(SERVER_ROOT, "users.db")
+    redis_url = os.environ.get("REDIS_URL", "").strip() or None
+    role = os.environ.get("SERVICE_ROLE", "all").strip().lower()
+    # gateway = WS + game engine; matchmaking runs in dedicated service
+    use_remote_mm = role in ("gateway", "ws-gateway") and bool(redis_url)
 
     users = _build_user_store(db_path, logger)
     sessions = _build_session_store(db_path, logger)
     registry = ConnectionRegistry(logger=logger)
-    # Concrete infra adapters satisfy application.ports (UserStore, SessionStore,
-    # EventPublisher, AppLogger) via structural typing / Protocols.
 
     def on_bus_error(event_type: str, exc: BaseException) -> None:
         logger.error(f"Event listener failed for {event_type}", exc=exc)
@@ -160,12 +168,21 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
                     user_id, encode(games.build_state_dict(room_id))
                 )
 
-    matchmaking = MatchmakingService(
-        logger=logger,
-        create_matched_room=rooms.create_matched_room,
-        notify_user=notify_user,
-        get_elo=get_elo,
-    )
+    if use_remote_mm:
+        assert redis_url is not None
+        mm_queue = RedisMatchmakingQueue(redis_url)
+        matchmaking = RedisMatchmakingGateway(
+            queue=mm_queue, get_elo=get_elo, logger=logger
+        )
+        logger.info("Matchmaking: remote Redis queue (matchmaker service)")
+    else:
+        matchmaking = MatchmakingService(
+            logger=logger,
+            create_matched_room=rooms.create_matched_room,
+            notify_user=notify_user,
+            get_elo=get_elo,
+        )
+        logger.info("Matchmaking: in-process")
 
     auth = AuthService(users=users, sessions=sessions)
     sessions_uc = SessionService(auth=auth, rooms=rooms, logger=logger)
@@ -198,4 +215,13 @@ def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
         logger=logger,
         on_client_disconnected=runtime.on_client_disconnected,
     )
-    return AppContainer(server=server, runtime=runtime, logger=logger)
+    return AppContainer(
+        server=server,
+        runtime=runtime,
+        logger=logger,
+        redis_url=redis_url,
+        rooms=rooms,
+        games=games,
+        registry=registry,
+        use_remote_matchmaker=use_remote_mm,
+    )

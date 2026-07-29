@@ -1,4 +1,4 @@
-"""Minimal entry point for the KungFu Chess server."""
+"""Minimal entry point for the KungFu Chess WebSocket gateway / monolith."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ if SERVER_ROOT not in sys.path:
     sys.path.insert(0, SERVER_ROOT)
 
 from bootstrap.wiring import create_app
+from infrastructure.matchmaking.event_listener import run_matchmaker_event_listener
 
 
 async def main() -> None:
@@ -18,6 +19,17 @@ async def main() -> None:
     port = int(os.environ.get("PORT", "8765"))
     container = create_app(host=host, port=port)
     asyncio.create_task(container.runtime.run())
+    if container.use_remote_matchmaker and container.redis_url:
+        asyncio.create_task(
+            run_matchmaker_event_listener(
+                redis_url=container.redis_url,
+                rooms=container.rooms,
+                games=container.games,
+                registry=container.registry,
+                logger=container.logger,
+            )
+        )
+        container.logger.info("Started matchmaker event listener on gateway")
     await container.server.run()
 
 

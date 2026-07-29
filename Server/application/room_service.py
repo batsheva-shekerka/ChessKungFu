@@ -45,12 +45,17 @@ class RoomService:
         self._logger.info("Room created", room_id=room_id, user_id=creator_user_id)
         return room
 
-    def create_matched_room(self, user_a: str, user_b: str) -> Room:
+    def create_matched_room(
+        self, user_a: str, user_b: str, room_id: str | None = None
+    ) -> Room:
         for uid in (user_a, user_b):
             if uid in self._user_room:
                 raise ValueError(f"user already in room: {uid}")
 
-        room_id = secrets.token_hex(3)
+        room_id = room_id or secrets.token_hex(3)
+        if room_id in self._rooms:
+            raise ValueError(f"room already exists: {room_id}")
+
         room = Room(room_id=room_id)
         room.members[user_a] = RoomMember(user_id=user_a, role=PlayerRole.WHITE)
         room.members[user_b] = RoomMember(user_id=user_b, role=PlayerRole.BLACK)
@@ -59,7 +64,9 @@ class RoomService:
         self._user_room[user_b] = room_id
         self._on_room_created(room_id)
         room.game_started = True
-        self._logger.info("Matched room created", room_id=room_id, white=user_a, black=user_b)
+        self._logger.info(
+            "Matched room created", room_id=room_id, white=user_a, black=user_b
+        )
         return room
 
     def join_room(self, room_id: str, user_id: str) -> tuple[Room, PlayerRole]:
