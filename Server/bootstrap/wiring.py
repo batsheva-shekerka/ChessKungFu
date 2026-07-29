@@ -24,6 +24,7 @@ from bootstrap.logging_setup import create_server_logger
 from domain.events import EventType
 from infrastructure.async_event_bus import AsyncEventBus
 from infrastructure.db.session_repository import SessionRepository
+from infrastructure.db.redis_session_repository import RedisSessionRepository
 from infrastructure.db.user_repository import UserRepository
 from infrastructure.game.board_loader import InputTxtBoardLoader
 from infrastructure.game.engine_adapter import KungFuEngineFactory
@@ -40,12 +41,31 @@ class AppContainer:
     logger: Any
 
 
+def _build_session_store(db_path: str, logger: Any):
+    """Prefer Redis when REDIS_URL is set; otherwise SQLite (local/dev)."""
+    redis_url = os.environ.get("REDIS_URL", "").strip()
+    if not redis_url:
+        logger.info("Session store: SQLite", path=db_path)
+        return SessionRepository(db_path)
+    try:
+        store = RedisSessionRepository(redis_url)
+        logger.info("Session store: Redis", url=redis_url)
+        return store
+    except Exception as exc:
+        logger.error(
+            "Redis session store unavailable; falling back to SQLite",
+            exc=exc,
+            redis_url=redis_url,
+        )
+        return SessionRepository(db_path)
+
+
 def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     logger = create_server_logger(SERVER_ROOT)
     db_path = os.path.join(SERVER_ROOT, "users.db")
 
     users = UserRepository(db_path)
-    sessions = SessionRepository(db_path)
+    sessions = _build_session_store(db_path, logger)
     registry = ConnectionRegistry(logger=logger)
     # Concrete infra adapters satisfy application.ports (UserStore, SessionStore,
     # EventPublisher, AppLogger) via structural typing / Protocols.

@@ -6,9 +6,8 @@
 #
 # Game clients connect to: ws://localhost:8765
 #
-# Note: the game-server still uses its built-in SQLite for users today.
-# Redis + Postgres are brought up here so the stack matches Server_Design.md
-# and is ready for the next integration step.
+# Note: game-server uses Redis for auth sessions when REDIS_URL is set.
+# Users/Elo still use SQLite until Postgres is wired (see Server_Design.md).
 
 services:
   redis:
