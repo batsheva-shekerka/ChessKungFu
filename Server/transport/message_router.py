@@ -233,6 +233,9 @@ class MessageRouter:
                 encode(outcome.broadcast_payload),
             )
 
+        for extra in outcome.extra_payloads:
+            await ctx.websocket.send(encode(extra))
+
         # Push current board when entering a room so graphics clients sync.
         payload = outcome.payload
         if isinstance(payload, dict):

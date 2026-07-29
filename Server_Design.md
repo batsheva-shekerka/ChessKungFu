@@ -37,7 +37,7 @@
 | API + WS Gateway | `ws-gateway` service (`server.py` / `app.py`) |
 | Matchmaker | `matchmaker` service + Redis queue (`infrastructure/matchmaking/`) |
 | Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` ב-Redis) |
-| Game Server | כרגע בתוך `ws-gateway` (מנוע authoritative); מוכן לפיצול shard נוסף |
+| Game Server | `game-server` service (`game_main.py`) — מנוע authoritative |
 | Persistence | PostgreSQL למשתמשים + Redis לסשנים/תור (SQLite כ-fallback מקומי) |
 
 המונולית נשאר נקודת התחלה תקינה; ה-Design מגדיר לאן מפרקים כשעוברים לסקייל.

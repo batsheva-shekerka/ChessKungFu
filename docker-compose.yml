@@ -1,8 +1,9 @@
 # KungFu Chess — split stack (Docker Compose)
 #
 # Services:
-#   ws-gateway  — WebSocket edge + auth + game engine (client port 8765)
-#   matchmaker  — Redis queue matching + Game Allocator
+#   ws-gateway   — thin WebSocket edge + auth (client port 8765)
+#   game-server  — authoritative GameEngine / rooms
+#   matchmaker   — Redis queue matching + Game Allocator
 #   redis / postgres
 #
 # Usage:
@@ -40,18 +41,33 @@ services:
       retries: 10
     restart: unless-stopped
 
-  ws-gateway:
+  game-server:
     build:
       context: .
       dockerfile: Dockerfile
     image: kungfu-chess-server:local
+    command: ["python", "-u", "game_main.py"]
+    environment:
+      SERVICE_ROLE: game
+      SHARD_ID: game-server
+      REDIS_URL: "redis://redis:6379/0"
+      DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ws-gateway:
+    image: kungfu-chess-server:local
+    command: ["python", "-u", "gateway_main.py"]
     environment:
       SERVICE_ROLE: gateway
       HOST: "0.0.0.0"
       PORT: "8765"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
-      GAME_SHARDS: "ws-gateway"
     ports:
       - "8765:8765"
     depends_on:
@@ -59,6 +75,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      game-server:
+        condition: service_started
     restart: unless-stopped
 
   matchmaker:
@@ -68,13 +86,13 @@ services:
       SERVICE_ROLE: matchmaker
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
-      GAME_SHARDS: "ws-gateway"
+      GAME_SHARDS: "game-server"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      ws-gateway:
+      game-server:
         condition: service_started
     restart: unless-stopped
 

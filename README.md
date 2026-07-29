@@ -59,7 +59,8 @@ docker compose up --build
 ```
 
 זה מריץ:
-- **ws-gateway** על פורט `8765` (WebSocket + משחק)
+- **ws-gateway** על פורט `8765` (WebSocket + auth)
+- **game-server** (מנוע משחק authoritative)
 - **matchmaker** (שידוך דרך Redis + Game Allocator)
 - **Redis** על פורט `6379`
 - **Postgres** על פורט `5432`

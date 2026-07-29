@@ -27,6 +27,7 @@ class CommandOutcome:
     payload: dict[str, Any] = field(default_factory=dict)
     broadcast_user_ids: list[str] = field(default_factory=list)
     broadcast_payload: Optional[dict[str, Any]] = None
+    extra_payloads: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
