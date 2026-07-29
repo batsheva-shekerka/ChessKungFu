@@ -26,11 +26,11 @@ from domain.models import PlayerRole
 from infrastructure.async_event_bus import AsyncEventBus
 from infrastructure.game.board_loader import InputTxtBoardLoader
 from infrastructure.game.engine_adapter import KungFuEngineFactory
+from infrastructure.matchmaking.allocator import GameAllocator
 from infrastructure.matchmaking.redis_queue import EVENTS_CHANNEL, RedisMatchmakingQueue
 from infrastructure.messaging.game_bus import GameCommandBus
 from protocol import (
     MatchFoundMessage,
-    MatchTimeoutMessage,
     encode,
     make_disconnect_countdown,
     make_game_over,
@@ -133,17 +133,28 @@ def _handle_command(
     games: GameService,
     lobby: LobbyService,
     bus: GameCommandBus,
+    allocator: GameAllocator,
+    shard_id: str,
     logger,
 ) -> dict[str, Any]:
     ctype = cmd.get("type")
     if ctype == "room_create":
-        outcome = lobby.create_room(str(cmd.get("user_id", "")))
-        return _outcome_to_reply(outcome, games)
+        user_id = str(cmd.get("user_id", ""))
+        outcome = lobby.create_room(user_id)
+        reply = _outcome_to_reply(outcome, games)
+        if reply.get("ok"):
+            room_id = str((reply.get("payload") or {}).get("room_id") or "")
+            if room_id:
+                allocator.bind_match(room_id, shard_id, [user_id])
+        return reply
     if ctype == "room_join":
-        outcome = lobby.join_room(
-            str(cmd.get("user_id", "")), str(cmd.get("room_id", ""))
-        )
-        return _outcome_to_reply(outcome, games)
+        user_id = str(cmd.get("user_id", ""))
+        room_id = str(cmd.get("room_id", ""))
+        outcome = lobby.join_room(user_id, room_id)
+        reply = _outcome_to_reply(outcome, games)
+        if reply.get("ok") and room_id:
+            allocator.bind_player(user_id, room_id)
+        return reply
     if ctype == "move":
         user_id = str(cmd.get("user_id", ""))
         start = cmd.get("start") or [0, 0]
@@ -185,6 +196,8 @@ async def _handle_create_match(
     rooms: RoomService,
     games: GameService,
     bus: GameCommandBus,
+    allocator: GameAllocator,
+    shard_id: str,
     logger,
 ) -> None:
     room_id = str(payload.get("room_id", ""))
@@ -197,6 +210,12 @@ async def _handle_create_match(
     except ValueError as exc:
         logger.error("Failed to create matched room", exc=exc, room_id=room_id)
         return
+    allocator.bind_match(room.room_id, shard_id, [white_id, black_id])
+    logger.info(
+        "Matched room created on shard",
+        room_id=room.room_id,
+        shard_id=shard_id,
+    )
     players = {
         PlayerRole.WHITE.value: white_id,
         PlayerRole.BLACK.value: black_id,
@@ -222,7 +241,9 @@ async def _handle_create_match(
         bus.publish_outbound([white_id, black_id], state)
 
 
-async def _mm_loop(mm_pubsub, rooms, games, bus, logger, shard_id: str) -> None:
+async def _mm_loop(
+    mm_pubsub, rooms, games, bus, allocator, logger, shard_id: str
+) -> None:
     while True:
         mm_msg = await asyncio.to_thread(mm_pubsub.get_message, True, 1.0)
         if not mm_msg or mm_msg.get("type") != "message":
@@ -242,20 +263,21 @@ async def _mm_loop(mm_pubsub, rooms, games, bus, logger, shard_id: str) -> None:
             if target != shard_id:
                 continue
             await _handle_create_match(
-                payload, rooms=rooms, games=games, bus=bus, logger=logger
-            )
-        elif payload.get("type") == "match_timeout":
-            bus.publish_outbound(
-                [str(payload.get("user_id", ""))],
-                MatchTimeoutMessage(
-                    reason=str(payload.get("reason", "matchmaking timeout"))
-                ).to_dict(),
+                payload,
+                rooms=rooms,
+                games=games,
+                bus=bus,
+                allocator=allocator,
+                shard_id=shard_id,
+                logger=logger,
             )
 
 
-async def _cmd_loop(bus, rooms, games, lobby, runtime, logger) -> None:
+async def _cmd_loop(
+    bus, rooms, games, lobby, runtime, allocator, shard_id, logger
+) -> None:
     while True:
-        item = await asyncio.to_thread(bus.brpop_command, 1)
+        item = await asyncio.to_thread(bus.brpop_command, shard_id, 1)
         if not item:
             await asyncio.sleep(0.01)
             continue
@@ -266,7 +288,14 @@ async def _cmd_loop(bus, rooms, games, lobby, runtime, logger) -> None:
             continue
         request_id = cmd.get("request_id")
         result = _handle_command(
-            cmd, rooms=rooms, games=games, lobby=lobby, bus=bus, logger=logger
+            cmd,
+            rooms=rooms,
+            games=games,
+            lobby=lobby,
+            bus=bus,
+            allocator=allocator,
+            shard_id=shard_id,
+            logger=logger,
         )
         if result.get("_async_move"):
             outcome = await games.submit_move(
@@ -288,7 +317,9 @@ async def _cmd_loop(bus, rooms, games, lobby, runtime, logger) -> None:
                 bus.reply(str(request_id), reply)
             continue
         if result.get("_async_disconnect"):
-            await runtime.on_client_disconnected(str(result["user_id"]))
+            user_id = str(result["user_id"])
+            await runtime.on_client_disconnected(user_id)
+            allocator.unbind_player(user_id)
             if request_id:
                 bus.reply(str(request_id), {"ok": True})
             continue
@@ -302,9 +333,10 @@ async def main() -> None:
     if not redis_url:
         raise SystemExit("REDIS_URL is required for game-server")
 
+    shard_id = os.environ.get("SHARD_ID", "game-server-1").strip()
     bus = GameCommandBus(redis_url)
+    allocator = GameAllocator(redis_url, shard_ids=[shard_id])
     rooms, games, lobby, runtime, _broadcast_users = _build_game_stack(logger, bus)
-    shard_id = os.environ.get("SHARD_ID", "game-server").strip()
     logger.info("Game server started", shard_id=shard_id)
 
     asyncio.create_task(runtime.run())
@@ -314,8 +346,8 @@ async def main() -> None:
     mm_pubsub.subscribe(EVENTS_CHANNEL)
 
     await asyncio.gather(
-        _mm_loop(mm_pubsub, rooms, games, bus, logger, shard_id),
-        _cmd_loop(bus, rooms, games, lobby, runtime, logger),
+        _mm_loop(mm_pubsub, rooms, games, bus, allocator, logger, shard_id),
+        _cmd_loop(bus, rooms, games, lobby, runtime, allocator, shard_id, logger),
     )
 
 

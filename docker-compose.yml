@@ -1,9 +1,9 @@
 # KungFu Chess — split stack (Docker Compose)
 #
 # Services:
-#   ws-gateway   — thin WebSocket edge + auth (client port 8765)
-#   game-server  — authoritative GameEngine / rooms
-#   matchmaker   — Redis queue matching + Game Allocator
+#   ws-gateway      — thin WebSocket edge + auth (client port 8765)
+#   game-server-1/2 — authoritative GameEngine shards (Allocator picks)
+#   matchmaker      — Redis queue matching + Game Allocator
 #   redis / postgres
 #
 # Usage:
@@ -41,7 +41,7 @@ services:
       retries: 10
     restart: unless-stopped
 
-  game-server:
+  game-server-1:
     build:
       context: .
       dockerfile: Dockerfile
@@ -49,7 +49,7 @@ services:
     command: ["python", "-u", "game_main.py"]
     environment:
       SERVICE_ROLE: game
-      SHARD_ID: game-server
+      SHARD_ID: game-server-1
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
     depends_on:
@@ -57,6 +57,23 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  game-server-2:
+    image: kungfu-chess-server:local
+    command: ["python", "-u", "game_main.py"]
+    environment:
+      SERVICE_ROLE: game
+      SHARD_ID: game-server-2
+      REDIS_URL: "redis://redis:6379/0"
+      DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      game-server-1:
+        condition: service_started
     restart: unless-stopped
 
   ws-gateway:
@@ -68,6 +85,7 @@ services:
       PORT: "8765"
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+      GAME_SHARDS: "game-server-1,game-server-2"
     ports:
       - "8765:8765"
     depends_on:
@@ -75,7 +93,9 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      game-server:
+      game-server-1:
+        condition: service_started
+      game-server-2:
         condition: service_started
     restart: unless-stopped
 
@@ -86,13 +106,15 @@ services:
       SERVICE_ROLE: matchmaker
       REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
-      GAME_SHARDS: "game-server"
+      GAME_SHARDS: "game-server-1,game-server-2"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      game-server:
+      game-server-1:
+        condition: service_started
+      game-server-2:
         condition: service_started
     restart: unless-stopped
 

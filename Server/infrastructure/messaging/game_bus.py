@@ -8,8 +8,11 @@ from typing import Any
 
 import redis
 
-GAME_CMD_QUEUE = "kungfu:game:cmdq"
 GATEWAY_OUT_CHANNEL = "kungfu:gateway:out"
+
+
+def cmd_queue_key(shard_id: str) -> str:
+    return f"kungfu:game:cmdq:{shard_id}"
 
 
 class GameCommandBus:
@@ -17,12 +20,18 @@ class GameCommandBus:
         self._r = redis.from_url(redis_url, decode_responses=True)
         self._r.ping()
 
-    def call(self, command: dict[str, Any], timeout: float = 5.0) -> dict[str, Any]:
+    def call(
+        self,
+        command: dict[str, Any],
+        timeout: float = 5.0,
+        *,
+        shard_id: str,
+    ) -> dict[str, Any]:
         request_id = str(uuid.uuid4())
         reply_key = f"kungfu:reply:{request_id}"
         payload = dict(command)
         payload["request_id"] = request_id
-        self._r.lpush(GAME_CMD_QUEUE, json.dumps(payload, ensure_ascii=False))
+        self._r.lpush(cmd_queue_key(shard_id), json.dumps(payload, ensure_ascii=False))
         result = self._r.blpop(reply_key, timeout=max(1, int(timeout)))
         if result is None:
             return {"ok": False, "error": "game server timeout"}
@@ -46,8 +55,8 @@ class GameCommandBus:
             ),
         )
 
-    def brpop_command(self, timeout: int = 1):
-        return self._r.brpop(GAME_CMD_QUEUE, timeout=timeout)
+    def brpop_command(self, shard_id: str, timeout: int = 1):
+        return self._r.brpop(cmd_queue_key(shard_id), timeout=timeout)
 
     def out_pubsub(self):
         return self._r.pubsub(ignore_subscribe_messages=True)

@@ -5,13 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 from application.dto import CommandOutcome, MoveOutcome
+from infrastructure.matchmaking.allocator import GameAllocator
 from infrastructure.messaging.game_bus import GameCommandBus
 
 
 class RemoteLobbyProxy:
-    def __init__(self, bus: GameCommandBus, matchmaking):
+    def __init__(
+        self, bus: GameCommandBus, matchmaking, allocator: GameAllocator
+    ):
         self._bus = bus
         self._mm = matchmaking
+        self._allocator = allocator
 
     def play(self, user_id: str) -> CommandOutcome:
         status = self._mm.enqueue(user_id)
@@ -30,12 +34,20 @@ class RemoteLobbyProxy:
         )
 
     def create_room(self, user_id: str) -> CommandOutcome:
-        reply = self._bus.call({"type": "room_create", "user_id": user_id})
+        shard = self._allocator.pick_shard()
+        reply = self._bus.call(
+            {"type": "room_create", "user_id": user_id},
+            shard_id=shard,
+        )
         return self._to_command_outcome(reply)
 
     def join_room(self, user_id: str, room_id: str) -> CommandOutcome:
+        shard = self._allocator.shard_for(room_id)
+        if not shard:
+            return CommandOutcome(ok=False, reason="room not found on any shard")
         reply = self._bus.call(
-            {"type": "room_join", "user_id": user_id, "room_id": room_id}
+            {"type": "room_join", "user_id": user_id, "room_id": room_id},
+            shard_id=shard,
         )
         return self._to_command_outcome(reply)
 
@@ -53,14 +65,18 @@ class RemoteLobbyProxy:
 
 
 class RemoteGameProxy:
-    def __init__(self, bus: GameCommandBus):
+    def __init__(self, bus: GameCommandBus, allocator: GameAllocator):
         self._bus = bus
+        self._allocator = allocator
 
     async def submit_move(
         self, user_id: str, start: tuple[int, int], end: tuple[int, int]
     ) -> MoveOutcome:
         import asyncio
 
+        shard = self._allocator.shard_for_user(user_id)
+        if not shard:
+            return MoveOutcome(ok=False, reason="not in a game on any shard")
         reply = await asyncio.to_thread(
             self._bus.call,
             {
@@ -69,6 +85,8 @@ class RemoteGameProxy:
                 "start": list(start),
                 "end": list(end),
             },
+            5.0,
+            shard_id=shard,
         )
         if not reply.get("ok"):
             return MoveOutcome(ok=False, reason=str(reply.get("error", "move failed")))
@@ -84,7 +102,13 @@ class RemoteGameProxy:
         return None
 
     def build_state_dict(self, room_id: str) -> dict:
-        reply = self._bus.call({"type": "get_state", "room_id": room_id})
+        shard = self._allocator.shard_for(room_id)
+        if not shard:
+            return {}
+        reply = self._bus.call(
+            {"type": "get_state", "room_id": room_id},
+            shard_id=shard,
+        )
         if reply.get("ok") and isinstance(reply.get("payload"), dict):
             return reply["payload"]
         return {}

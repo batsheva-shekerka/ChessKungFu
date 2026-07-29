@@ -32,7 +32,7 @@ async def main() -> None:
 
     shards = [
         s.strip()
-        for s in os.environ.get("GAME_SHARDS", "ws-gateway").split(",")
+        for s in os.environ.get("GAME_SHARDS", "game-server-1,game-server-2").split(",")
         if s.strip()
     ]
     queue = RedisMatchmakingQueue(redis_url)

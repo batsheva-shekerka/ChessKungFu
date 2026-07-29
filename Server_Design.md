@@ -34,10 +34,10 @@
 
 | רכיב ב-Design | מימוש נוכחי (בקירוב) |
 |---------------|----------------------|
-| API + WS Gateway | `ws-gateway` service (`server.py` / `app.py`) |
+| API + WS Gateway | `ws-gateway` (`gateway_main.py`) — login עדיין על WS |
 | Matchmaker | `matchmaker` service + Redis queue (`infrastructure/matchmaking/`) |
-| Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` ב-Redis) |
-| Game Server | `game-server` service (`game_main.py`) — מנוע authoritative |
+| Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` + `user → room` ב-Redis) |
+| Game Server | `game-server-1` / `game-server-2` (`game_main.py`) — shards עם תור פקודות נפרד לכל אחד |
 | Persistence | PostgreSQL למשתמשים + Redis לסשנים/תור (SQLite כ-fallback מקומי) |
 
 המונולית נשאר נקודת התחלה תקינה; ה-Design מגדיר לאן מפרקים כשעוברים לסקייל.
@@ -183,7 +183,7 @@ services:
   matchmaker
   game-allocator       # יכול להיות חלק קטן / שירות דק
   game-server-1        # shard עם GameEngine
-  # game-server-2      # אופציונלי להדגמת הקצאה
+  game-server-2        # shard שני — Allocator מפזר rooms
 ```
 
 תקשורת פנימית ראשונית: **Redis PubSub** (פשוט יותר מ-NATS ללימוד).  
