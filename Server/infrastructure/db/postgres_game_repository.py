@@ -82,6 +82,22 @@ class PostgresGameRepository:
             ).fetchall()
         return [_row_to_result(r) for r in rows]
 
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[GameResult]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT room_id, white_id, black_id, winner,
+                       white_elo_before, black_elo_before,
+                       white_elo_after, black_elo_after, ended_at
+                FROM games
+                WHERE white_id = %s OR black_id = %s
+                ORDER BY ended_at DESC
+                LIMIT %s
+                """,
+                (user_id, user_id, max(1, min(limit, 100))),
+            ).fetchall()
+        return [_row_to_result(r) for r in rows]
+
 
 def _row_to_result(row) -> GameResult:
     return GameResult(

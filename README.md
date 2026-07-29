@@ -59,13 +59,15 @@ docker compose up --build
 ```
 
 זה מריץ:
-- **ws-gateway** על פורט `8765` (WebSocket + auth)
+- **api-gateway** על פורט `18088` (HTTP: login / history / rooms)
+- **ws-gateway** על פורט `8765` (WebSocket real-time)
 - **game-server-1** / **game-server-2** (שני shards של מנוע authoritative; ה-Allocator בוחר)
 - **matchmaker** (שידוך דרך Redis + Game Allocator)
 - **Redis** על פורט `6379`
 - **Postgres** על פורט `5432`
 
 Health / metrics (בדפדפן או `curl`):
+- API: http://localhost:18088/health · http://localhost:18088/metrics · `POST /api/login` · `GET /api/history`
 - Gateway: http://localhost:18080/health · http://localhost:18080/metrics
 - Matchmaker: http://localhost:18081/health · http://localhost:18081/metrics
 - Game-1: http://localhost:18082/health · http://localhost:18082/metrics
@@ -189,15 +191,18 @@ chess/
 ## ארכיטקטורה בקצרה
 
 ```text
-[גרפיקה] --WS--> [ws-gateway] --Redis--> [matchmaker]
-                      |                      |
-                      +----Redis cmdq----> [game-server-1/2]
-                                              |
-                                         Postgres (users, games)
+[גרפיקה] --HTTP login--> [api-gateway] ----+
+     |                                      |
+     +--------WS real-time----> [ws-gateway] --Redis--> [matchmaker]
+                                      |                      |
+                                      +----Redis cmdq----> [game-server-1/2]
+                                                              |
+                                                         Postgres (users, games)
 ```
 
-- ה-**Game Server** הוא **מקור האמת** לחוקיות מהלכים ולמצב המשחק
-- Gateway דק: auth + ניתוב; Matchmaker + Allocator בוחרים shard
+- **API Gateway** = פעולות שאינן זמן-אמת (login, history, room lookup)
+- **WS Gateway** = חיבורים חיים + מהלכים / state
+- ה-**Game Server** הוא **מקור האמת** לחוקיות מהלכים
 - אחרי `game_over`: Elo + רשומת `games` ב-Postgres; מיפויי Redis של החדר מנוקים
 - Reconnect: `user→room→shard` ב-Redis מאפשר חזרה תוך חלון חסד
 

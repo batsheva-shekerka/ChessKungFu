@@ -1,22 +1,26 @@
 # KungFu Chess — split stack (Docker Compose)
 #
 # Services:
-#   ws-gateway      — thin WebSocket edge + auth (client port 8765)
-#   game-server-1/2 — authoritative GameEngine shards (Allocator picks)
+#   api-gateway     — HTTP login / history / room lookup (host 18088)
+#   ws-gateway      — thin WebSocket edge (client port 8765)
+#   game-server-1/2 — authoritative GameEngine shards
 #   matchmaker      — Redis queue matching + Game Allocator
 #   redis / postgres
 #
 # Health / metrics (host):
-#   gateway       http://localhost:18080/health | /metrics
+#   api-gateway   http://localhost:18088/health | /metrics
+#   ws-gateway    http://localhost:18080/health | /metrics
 #   matchmaker    http://localhost:18081/health | /metrics
 #   game-server-1 http://localhost:18082/health | /metrics
 #   game-server-2 http://localhost:18083/health | /metrics
 #
+# Clients:
+#   HTTP login  -> http://localhost:18088/api/login
+#   WebSocket   -> ws://localhost:8765
+#
 # Usage:
 #   docker compose up --build
 #   docker compose down
-#
-# Clients connect to: ws://localhost:8765
 
 x-app-healthcheck: &app_healthcheck
   test:
@@ -25,6 +29,19 @@ x-app-healthcheck: &app_healthcheck
       "python",
       "-c",
       "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)",
+    ]
+  interval: 10s
+  timeout: 3s
+  retries: 5
+  start_period: 10s
+
+x-api-healthcheck: &api_healthcheck
+  test:
+    [
+      "CMD",
+      "python",
+      "-c",
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health', timeout=2)",
     ]
   interval: 10s
   timeout: 3s
@@ -103,6 +120,25 @@ services:
     healthcheck: *app_healthcheck
     restart: unless-stopped
 
+  api-gateway:
+    image: kungfu-chess-server:local
+    command: ["python", "-u", "api_main.py"]
+    environment:
+      SERVICE_ROLE: api
+      HOST: "0.0.0.0"
+      API_PORT: "8088"
+      REDIS_URL: "redis://redis:6379/0"
+      DATABASE_URL: "postgresql://kungfu:kungfu@postgres:5432/kungfu_chess"
+    ports:
+      - "18088:8088"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck: *api_healthcheck
+    restart: unless-stopped
+
   ws-gateway:
     image: kungfu-chess-server:local
     command: ["python", "-u", "gateway_main.py"]
@@ -125,6 +161,8 @@ services:
       game-server-1:
         condition: service_healthy
       game-server-2:
+        condition: service_healthy
+      api-gateway:
         condition: service_healthy
     healthcheck: *app_healthcheck
     restart: unless-stopped

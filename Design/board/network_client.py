@@ -26,6 +26,7 @@ from protocol import (  # noqa: E402
     ProtocolError,
     decode,
     encode,
+    make_auth,
     make_cancel_play,
     make_login,
     make_move,
@@ -38,8 +39,13 @@ from protocol import (  # noqa: E402
 class NetworkClient:
     """Background WebSocket client; UI reads state / polls events."""
 
-    def __init__(self, uri: str = "ws://localhost:8765"):
+    def __init__(
+        self,
+        uri: str = "ws://localhost:8765",
+        api_base: str = "http://localhost:18088",
+    ):
         self.uri = uri
+        self.api_base = api_base.rstrip("/")
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._ws = None
         self._thread: Optional[threading.Thread] = None
@@ -91,7 +97,54 @@ class NetworkClient:
             return None
 
     def login(self, username: str, password: str) -> None:
-        self._send(encode(make_login(username, password)))
+        """Login via HTTP API Gateway, then bind the WS session with the token."""
+
+        def _http_login() -> None:
+            import json
+            import urllib.error
+            import urllib.request
+
+            url = f"{self.api_base}/api/login"
+            payload = json.dumps(
+                {"username": username, "password": password}
+            ).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                try:
+                    body = json.loads(exc.read().decode("utf-8"))
+                    reason = body.get("error") or f"HTTP {exc.code}"
+                except Exception:
+                    reason = f"HTTP {exc.code}"
+                self.last_error = str(reason)
+                self.status = self.last_error
+                self.events.put(("error", {"reason": self.last_error}))
+                return
+            except Exception as exc:
+                # Fallback: WS login (monolith / old stack without api-gateway)
+                self.status = f"API login failed ({exc}); trying WS login..."
+                self._send(encode(make_login(username, password)))
+                return
+
+            if not data.get("ok"):
+                self.last_error = str(data.get("error") or "login failed")
+                self.status = self.last_error
+                self.events.put(("error", {"reason": self.last_error}))
+                return
+
+            self._on_login_ok(data)
+            token = data.get("token")
+            if token:
+                self._send(encode(make_auth(str(token))))
+
+        threading.Thread(target=_http_login, daemon=True).start()
 
     def play(self) -> None:
         self._send(encode(make_play()))

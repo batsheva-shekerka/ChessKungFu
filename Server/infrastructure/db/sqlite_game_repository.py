@@ -89,3 +89,32 @@ class SqliteGameRepository:
             )
             for r in rows
         ]
+
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[GameResult]:
+        with sqlite3.connect(self._db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT room_id, white_id, black_id, winner,
+                       white_elo_before, black_elo_before,
+                       white_elo_after, black_elo_after, ended_at
+                FROM games
+                WHERE white_id = ? OR black_id = ?
+                ORDER BY ended_at DESC
+                LIMIT ?
+                """,
+                (user_id, user_id, max(1, min(limit, 100))),
+            ).fetchall()
+        return [
+            GameResult(
+                room_id=r[0],
+                white_id=r[1],
+                black_id=r[2],
+                winner=r[3],
+                white_elo_before=int(r[4]),
+                black_elo_before=int(r[5]),
+                white_elo_after=int(r[6]),
+                black_elo_after=int(r[7]),
+                ended_at=float(r[8]) if r[8] is not None else None,
+            )
+            for r in rows
+        ]

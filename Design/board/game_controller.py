@@ -56,10 +56,14 @@ class ChessGameController:
     Login / Lobby ב-UI, ואז מהלכים בלחיצות על הלוח שנשלחות ב-WebSocket.
     """
 
-    def __init__(self, server_uri: str = "ws://localhost:8765"):
+    def __init__(
+        self,
+        server_uri: str = "ws://localhost:8765",
+        api_base: str = "http://localhost:18088",
+    ):
         self.input_txt_path = os.path.join(ROOT_DIR, "input.txt")
         self.renderer = ChessRenderer()
-        self.net = NetworkClient(uri=server_uri)
+        self.net = NetworkClient(uri=server_uri, api_base=api_base)
 
         self.screen = SCREEN_LOGIN
         self.username = ""

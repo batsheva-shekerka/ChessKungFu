@@ -34,7 +34,8 @@
 
 | רכיב ב-Design | מימוש נוכחי (בקירוב) |
 |---------------|----------------------|
-| API + WS Gateway | `ws-gateway` (`gateway_main.py`) — login עדיין על WS |
+| API Gateway | `api-gateway` (`api_main.py`) — HTTP: login / history / room lookup |
+| WebSocket Gateway | `ws-gateway` (`gateway_main.py`) — חיבורים חיים + auth token |
 | Matchmaker | `matchmaker` service + Redis queue (`infrastructure/matchmaking/`) |
 | Game Allocator | `GameAllocator` בתוך matchmaker (רושם `room → shard` + `user → room` ב-Redis) |
 | Game Server | `game-server-1` / `game-server-2` (`game_main.py`) — shards עם תור פקודות נפרד לכל אחד |
@@ -106,10 +107,10 @@ SQLite נועל קובץ יחיד לכתיבות. תחת עומס מקבילי �
 
 ### 4.1 Login
 
-1. Client → **API Gateway** (`login`)
+1. Client → **API Gateway** HTTP `POST /api/login`
 2. אימות / יצירת משתמש מול **PostgreSQL**
 3. יצירת session ב-**Redis** + token ללקוח
-4. Client מתחבר ל-**WebSocket Gateway** עם token
+4. Client מתחבר ל-**WebSocket Gateway** ושולח `auth` עם token (reconnect אם יש חדר פעיל)
 
 ### 4.2 Matchmaking
 
@@ -184,7 +185,6 @@ services:
   api-gateway          # login / rooms / history (HTTP)
   ws-gateway           # WebSocket ללקוח
   matchmaker
-  game-allocator       # יכול להיות חלק קטן / שירות דק
   game-server-1        # shard עם GameEngine
   game-server-2        # shard שני — Allocator מפזר rooms
 ```

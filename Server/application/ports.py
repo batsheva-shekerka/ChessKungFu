@@ -47,6 +47,8 @@ class GameHistoryStore(Protocol):
 
     def list_recent(self, limit: int = 20) -> list[GameResult]: ...
 
+    def list_for_user(self, user_id: str, limit: int = 20) -> list[GameResult]: ...
+
 
 class SessionStore(Protocol):
     def create(
