@@ -197,6 +197,12 @@ class MessageRouter:
                     )
                 )
             )
+            try:
+                state = self._games.build_state_dict(outcome.rejoin_room_id)
+            except Exception:
+                state = {}
+            if isinstance(state, dict) and state.get("type"):
+                await ctx.websocket.send(encode(state))
 
     async def _on_move(self, ctx: ConnectionContext, data: dict[str, Any]) -> None:
         assert ctx.user_id

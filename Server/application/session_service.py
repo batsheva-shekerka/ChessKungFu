@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from application.auth_service import AuthService
 from application.dto import SessionOutcome
 from application.ports import AppLogger
-from application.room_service import RoomService
 from domain.models import PlayerRole
 
 
@@ -13,7 +14,7 @@ class SessionService:
     def __init__(
         self,
         auth: AuthService,
-        rooms: RoomService,
+        rooms: Any,
         logger: AppLogger,
     ):
         self._auth = auth

@@ -105,6 +105,14 @@ def _build_game_stack(logger, bus: GameCommandBus):
             black_name = u.username if u else None
         return white_id, black_id, white_name, black_name
 
+    # allocator is created in main(); injected via holder after stack build
+    finished_hook: dict[str, Any] = {"fn": None}
+
+    def on_game_finished(room_id: str, user_ids: list[str]) -> None:
+        fn = finished_hook.get("fn")
+        if callable(fn):
+            fn(room_id, user_ids)
+
     games = GameService(
         users=users,
         bus=event_bus,
@@ -116,6 +124,7 @@ def _build_game_stack(logger, bus: GameCommandBus):
         mark_elo_updated=rooms.mark_elo_updated,
         broadcast_room=broadcast_room,
         game_history=game_history,
+        on_game_finished=on_game_finished,
     )
     games_holder["games"] = games
 
@@ -130,7 +139,7 @@ def _build_game_stack(logger, bus: GameCommandBus):
         make_game_over_fn=make_game_over,
         make_disconnect_countdown_fn=make_disconnect_countdown,
     )
-    return rooms, games, lobby, runtime, broadcast_users, game_history
+    return rooms, games, lobby, runtime, broadcast_users, game_history, finished_hook
 
 
 def _handle_command(
@@ -176,6 +185,25 @@ def _handle_command(
     if ctype == "player_disconnected":
         user_id = str(cmd.get("user_id", ""))
         return {"_async_disconnect": True, "user_id": user_id}
+    if ctype == "player_reconnect":
+        user_id = str(cmd.get("user_id", ""))
+        room_id = rooms.reconnect(user_id)
+        if room_id is None:
+            room_id = rooms.room_id_for_user(user_id)
+            if room_id:
+                rooms.reconnect(user_id)
+        if room_id is None:
+            return {"ok": False, "error": "not in a room"}
+        if games.get_engine(room_id) is None:
+            return {"ok": False, "error": "game not active"}
+        role = rooms.member_role(room_id, user_id)
+        color = role.value if role is not None else None
+        return {
+            "ok": True,
+            "room_id": room_id,
+            "color": color,
+            "state": games.build_state_dict(room_id),
+        }
     logger.warning("Unknown game command", cmd=cmd)
     return {"ok": False, "error": f"unknown command: {ctype}"}
 
@@ -326,7 +354,7 @@ async def _cmd_loop(
         if result.get("_async_disconnect"):
             user_id = str(result["user_id"])
             await runtime.on_client_disconnected(user_id)
-            allocator.unbind_player(user_id)
+            # Keep Redis user→room during grace so reconnect can find the shard.
             if request_id:
                 bus.reply(str(request_id), {"ok": True})
             continue
@@ -345,9 +373,19 @@ async def main() -> None:
     shard_id = os.environ.get("SHARD_ID", "game-server-1").strip()
     bus = GameCommandBus(redis_url)
     allocator = GameAllocator(redis_url, shard_ids=[shard_id])
-    rooms, games, lobby, runtime, _broadcast_users, game_history = _build_game_stack(
-        logger, bus
+    rooms, games, lobby, runtime, _broadcast_users, game_history, finished_hook = (
+        _build_game_stack(logger, bus)
     )
+
+    def _cleanup_redis(room_id: str, user_ids: list[str]) -> None:
+        allocator.release_match(room_id, user_ids)
+        logger.info(
+            "Redis room mappings cleared",
+            room_id=room_id,
+            players=user_ids,
+        )
+
+    finished_hook["fn"] = _cleanup_redis
     logger.info("Game server started", shard_id=shard_id)
 
     def snapshot() -> dict:

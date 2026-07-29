@@ -62,3 +62,13 @@ class GameAllocator:
         self.claim_room(room_id, shard_id)
         for uid in user_ids:
             self.bind_player(uid, room_id)
+
+    def release_match(self, room_id: str, user_ids: Sequence[str] | None = None) -> None:
+        """Clear room→shard and user→room after game_over / cleanup."""
+        if room_id:
+            self._r.delete(ROOM_SHARD_KEY.format(room_id=room_id))
+        for uid in user_ids or ():
+            self.unbind_player(uid)
+        if user_ids is None and room_id:
+            # best-effort: nothing else to clear without known players
+            pass

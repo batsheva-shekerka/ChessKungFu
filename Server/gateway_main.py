@@ -19,6 +19,7 @@ from infrastructure.matchmaking.allocator import GameAllocator
 from infrastructure.matchmaking.gateway_client import RedisMatchmakingGateway
 from infrastructure.matchmaking.redis_queue import EVENTS_CHANNEL, RedisMatchmakingQueue
 from infrastructure.messaging.game_bus import GATEWAY_OUT_CHANNEL, GameCommandBus
+from infrastructure.messaging.redis_room_rejoin import RedisRoomRejoinProxy
 from infrastructure.messaging.remote_proxies import RemoteGameProxy, RemoteLobbyProxy
 from infrastructure.observability import (
     LatencyTracker,
@@ -30,11 +31,6 @@ from protocol import MatchTimeoutMessage, encode
 from transport.connection_registry import ConnectionRegistry
 from transport.message_router import MessageRouter
 from transport.websocket_server import WebSocketServerApp
-
-
-class _NoRooms:
-    def reconnect(self, user_id: str):
-        return None
 
 
 async def _outbound_listener(bus: GameCommandBus, registry: ConnectionRegistry, logger) -> None:
@@ -123,9 +119,10 @@ async def main() -> None:
     allocator = GameAllocator(redis_url, shard_ids=shards)
     lobby = RemoteLobbyProxy(bus, matchmaking, allocator)
     games = RemoteGameProxy(bus, allocator, move_latency=move_latency)
+    rooms = RedisRoomRejoinProxy(bus, allocator, logger=logger)
 
     auth = AuthService(users=users, sessions=sessions)
-    sessions_uc = SessionService(auth=auth, rooms=_NoRooms(), logger=logger)
+    sessions_uc = SessionService(auth=auth, rooms=rooms, logger=logger)
     router = MessageRouter(
         sessions=sessions_uc,
         lobby=lobby,

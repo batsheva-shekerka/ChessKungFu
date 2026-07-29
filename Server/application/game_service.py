@@ -18,6 +18,7 @@ from domain.models import GameResult, PlayerRole
 
 
 BroadcastFn = Callable[[str, str], Any]  # room_id, encoded_message
+GameFinishedFn = Callable[[str, list[str]], None]  # room_id, user_ids
 
 
 class GameService:
@@ -37,6 +38,7 @@ class GameService:
         mark_elo_updated: Callable[[str], None],
         broadcast_room: BroadcastFn,
         game_history: GameHistoryStore | None = None,
+        on_game_finished: GameFinishedFn | None = None,
     ):
         self._users = users
         self._bus = bus
@@ -49,6 +51,7 @@ class GameService:
         self._mark_elo_updated = mark_elo_updated
         self._broadcast_room = broadcast_room
         self._game_history = game_history
+        self._on_game_finished = on_game_finished
 
     def create_engine_for_room(self, room_id: str) -> GameEnginePort:
         engine = self._engine_factory.create()
@@ -218,3 +221,13 @@ class GameService:
             ratings=ratings,
         )
         self._logger.info("ELO updated", room_id=room_id, ratings=ratings)
+
+        if self._on_game_finished is not None:
+            try:
+                self._on_game_finished(room_id, [white_id, black_id])
+            except Exception as exc:
+                self._logger.error(
+                    "on_game_finished callback failed",
+                    exc=exc,
+                    room_id=room_id,
+                )

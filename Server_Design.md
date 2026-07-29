@@ -136,8 +136,9 @@ SQLite נועל קובץ יחיד לכתיבות. תחת עומס מקבילי �
 
 ### 4.5 Reconnect
 
-* Session / `room_id` ב-Redis מאפשרים חזרה תוך חלון חסד
-* WS Gateway מאמת token ומשייך מחדש לחדר הפעיל ב-shard
+* `user→room` ו-`room→shard` ב-Redis נשמרים גם בזמן ניתוק (חלון חסד ~20 שניות)
+* ב-login מחדש ה-WS Gateway קורא ל-game shard (`player_reconnect`), שולח `rejoined_room` + `state`
+* אחרי `game_over` המיפויים ב-Redis מנוקים (cleanup)
 
 ---
 
@@ -162,7 +163,7 @@ SQLite נועל קובץ יחיד לכתיבות. תחת עומס מקבילי �
 | **Logs** | login, match_found, move rejected, game_over, disconnect grace (כבר קיים בסיס ב-`Server/logs`) |
 | **Metrics** | `/metrics` לכל שירות: חיבורי WS, אורך תור matchmaking, rooms לכל shard, latency של move→ack |
 | **Health** | `/health` לכל שירות (process + Redis/Postgres); גם Docker `healthcheck` ב-Compose |
-| **Load tests** | סימולציית לקוחות (login + play + moves) מול Compose לפני K8s |
+| **Load tests** | `Server/load_test.py` — login + play + moves מול Compose; לפני K8s |
 
 פורטים מקומיים (Compose): gateway `18080`, matchmaker `18081`, game-server-1 `18082`, game-server-2 `18083`.
 

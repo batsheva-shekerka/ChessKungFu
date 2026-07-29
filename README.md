@@ -73,6 +73,25 @@ Health / metrics (בדפדפן או `curl`):
 
 ב-`/metrics` תראו למשל חיבורי WS, אורך תור matchmaking, rooms לכל shard, ו-latency של move→ack.
 
+### בדיקת דמו מהירה (Compose)
+
+1. `docker compose up --build -d` — כל השירותים `healthy`
+2. שני קליינטים גרפיים → Login → Play → משחק
+3. Metrics: http://localhost:18080/metrics (חיבורים / latency)
+4. אחרי סיום משחק — היסטוריה ב-Postgres:
+
+```bash
+docker compose exec postgres psql -U kungfu -d kungfu_chess -c "SELECT room_id, winner, white_elo_after, black_elo_after FROM games ORDER BY ended_at DESC LIMIT 5;"
+```
+
+5. **Reconnect:** באמצע משחק סגרו קליינט אחד, פתחו שוב והתחברו **עם אותו משתמש** תוך ~20 שניות — אמור לחזור לחדר (`rejoined_room` + מצב לוח).
+
+6. **Load smoke test** (אופציונלי):
+
+```bash
+py -3 Server/load_test.py --pairs 2
+```
+
 עצירה:
 
 ```bash
@@ -170,15 +189,17 @@ chess/
 ## ארכיטקטורה בקצרה
 
 ```text
-[גרפיקה OpenCV]  --WebSocket JSON-->  [Server]
-       |                                    |
-  ציור + אנימציה                      מנוע + חדרים
-  login / lobby / moves               Elo + matchmaking
+[גרפיקה] --WS--> [ws-gateway] --Redis--> [matchmaker]
+                      |                      |
+                      +----Redis cmdq----> [game-server-1/2]
+                                              |
+                                         Postgres (users, games)
 ```
 
-- השרת הוא **מקור האמת** לחוקיות מהלכים ולמצב המשחק
-- הגרפיקה שולחת פקודות (`login`, `play`, `move`…) ומציגה `state` / אנימציה מקומית אחרי `ack`
-- פרוטוקול ההודעות מוגדר ב-`Server/protocol.py`
+- ה-**Game Server** הוא **מקור האמת** לחוקיות מהלכים ולמצב המשחק
+- Gateway דק: auth + ניתוב; Matchmaker + Allocator בוחרים shard
+- אחרי `game_over`: Elo + רשומת `games` ב-Postgres; מיפויי Redis של החדר מנוקים
+- Reconnect: `user→room→shard` ב-Redis מאפשר חזרה תוך חלון חסד
 
 ---
 
