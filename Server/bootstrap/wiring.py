@@ -26,6 +26,7 @@ from infrastructure.async_event_bus import AsyncEventBus
 from infrastructure.db.session_repository import SessionRepository
 from infrastructure.db.redis_session_repository import RedisSessionRepository
 from infrastructure.db.user_repository import UserRepository
+from infrastructure.db.postgres_user_repository import PostgresUserRepository
 from infrastructure.game.board_loader import InputTxtBoardLoader
 from infrastructure.game.engine_adapter import KungFuEngineFactory
 from protocol import encode, make_disconnect_countdown, make_game_over
@@ -60,11 +61,31 @@ def _build_session_store(db_path: str, logger: Any):
         return SessionRepository(db_path)
 
 
+def _build_user_store(db_path: str, logger: Any):
+    """Prefer PostgreSQL when DATABASE_URL is set; otherwise SQLite."""
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    if not database_url:
+        logger.info("User store: SQLite", path=db_path)
+        return UserRepository(db_path)
+    try:
+        store = PostgresUserRepository(database_url)
+        # Avoid logging password in plain URL
+        safe = database_url.split("@")[-1] if "@" in database_url else database_url
+        logger.info("User store: PostgreSQL", host=safe)
+        return store
+    except Exception as exc:
+        logger.error(
+            "PostgreSQL user store unavailable; falling back to SQLite",
+            exc=exc,
+        )
+        return UserRepository(db_path)
+
+
 def create_app(host: str = "localhost", port: int = 8765) -> AppContainer:
     logger = create_server_logger(SERVER_ROOT)
     db_path = os.path.join(SERVER_ROOT, "users.db")
 
-    users = UserRepository(db_path)
+    users = _build_user_store(db_path, logger)
     sessions = _build_session_store(db_path, logger)
     registry = ConnectionRegistry(logger=logger)
     # Concrete infra adapters satisfy application.ports (UserStore, SessionStore,

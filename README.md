@@ -71,8 +71,9 @@ docker compose down
 
 הקליינט הגרפי רץ מקומית כמו קודם (`py -3 Design/board/main_design.py`) ומתחבר ל-`ws://localhost:8765`.
 
-> Sessions נשמרים ב-**Redis** כשמוגדר `REDIS_URL` (כמו ב-Compose).  
-> משתמשים / Elo עדיין ב-SQLite עד לחיבור Postgres לפי `Server_Design.md`.
+> Sessions → **Redis** (`REDIS_URL`).  
+> Users / Elo → **PostgreSQL** (`DATABASE_URL`).  
+> בלי המשתנים האלה השרת נופל חזרה ל-SQLite (פיתוח מקומי).
 
 ### 2. הפעלת הגרפיקה (קליינט)
 

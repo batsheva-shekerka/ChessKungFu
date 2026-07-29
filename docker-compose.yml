@@ -6,8 +6,8 @@
 #
 # Game clients connect to: ws://localhost:8765
 #
-# Note: game-server uses Redis for auth sessions when REDIS_URL is set.
-# Users/Elo still use SQLite until Postgres is wired (see Server_Design.md).
+# Note: game-server uses Redis for sessions (REDIS_URL) and
+# PostgreSQL for users/Elo (DATABASE_URL). SQLite remains the local fallback.
 
 services:
   redis:
